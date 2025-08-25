@@ -1,7 +1,8 @@
-from sketch import Sketch
+from MrjittatVersion.sketch import Sketch
 from collections import Counter
 import random
 import matplotlib.pyplot as plt
+from MrJittacore import matrix_rank_finite_field
 
 debug = False
 

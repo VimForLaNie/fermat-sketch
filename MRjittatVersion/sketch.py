@@ -1,4 +1,4 @@
-from row import Rows
+from MrjittatVersion.row import Rows
 from collections import deque, defaultdict
 
 
