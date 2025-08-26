@@ -1,42 +1,69 @@
 import random
-from MrjittatVersion.bucket import Bucket
+from bucket import Bucket
 from kbucket import Kbucket
 from MrJittacore import matrix_rank_finite_field, brute_force_k2_2d, inverse_matrix
+import numpy as np
 
 class Rows() :
-	def __init__(self,m,p):
-		self.kbuckets = [Kbucket(p) for _ in range(m)]
+	def __init__(self,m,p,k):
+		self.kbuckets = [Kbucket(k,p) for _ in range(m)]
+		self.p = p
+		self.m = m
 		self._a = random.randint(1, p - 1)
 		self._b = random.randint(0, p - 1)
+		self.k = k
 		pass
 
 	def hash(self, f):
-		return ((self._a * f + self._b) % self.p) % self.bucket_size
+		return ((self._a * f + self._b) % self.p) % self.m
 
 	def insert(self, f):
 		h = self.hash(f)
+		print(f,h)
 		self.kbuckets[h].insert(f)
 		return h
 
 	def pure_verification(self, i) :
-		a = [bucket.id for bucket in self.kbuckets[i]]
+		a = np.array([bucket.count for bucket in self.kbuckets[i].kbucket], dtype=int).reshape(-1, 1)
+		id = np.array([bucket.id for bucket in self.kbuckets[i].kbucket], dtype=int).reshape(-1, 1)
+		test = []
+		# print(a)
 		for g in brute_force_k2_2d(self.k) :
+			g = np.array(g, dtype=int)
 			try :
 				inv = inverse_matrix(g)
-				c = inv @ a 
-				b = b @ c
-				inv = inverse_matrix(b)
-				f = b @ inv
-				for fi in f :
-					if self.hash(fi) != i :
+				c = (inv @ a)
+				if not np.allclose(c, np.round(c), atol=1e-10):
+					continue
+				if np.any(c < 0) :
+					continue
+				c = np.round(c).astype(int)
+				c_diag = np.diagflat(c)
+				gc = (g @ c_diag) 
+				gc_inv = inverse_matrix(gc)
+				f = (gc_inv @ id)
+				#close round
+				if not np.allclose(f, np.round(f), atol=1e-10):
+					continue
+				f = np.round(f).astype(int)
+				flag = True
+				for idx in range(len(f)) :
+					if self.hash(int(f[idx][0])) != i :
+						flag = False
 						break
-				return [(f[i],c[i]) for i in range(len(f))]
-			except : 
+				if flag :
+					print(f"found pure: {f.flatten()}, count: {c.flatten()}")
+					return [(int(f[idx][0]), int(c[idx][0])) for idx in range(len(f))]
+			except np.linalg.LinAlgError : 
+				# print("not invertible")
 				pass
 		return []
+	
 
 	
 	def delete(self, f, cnt) :
+		# print(f)
 		h = self.hash(f)
+		# print(h)
 		self.kbuckets[h].delete(f,cnt)
 	

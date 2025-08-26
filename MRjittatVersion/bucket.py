@@ -6,15 +6,20 @@ class Bucket() :
 		self.id = 0
 		self.p = p
 		self._a = random.randint(1, max_rc)
-		self._b = random.randint(0, max_rc)
+		self._b = random.randint(1, max_rc)
 		pass
 	
 	def g(self, x) :
-		return ((self._a * x + self._b) % self.rc)
+		# arr = [1,2,3,4]
+		arr = [i for i in range(1,max_rc+1)]
+		return arr[(self._a * x + self._b) % (max_rc)]
+		# return x % max_rc
+		# return arr[x % len(arr)]
 
 	def insert(self, flow_id):
+		print(f"g({flow_id}) = ",self.g(flow_id))
 		self.count += self.g(flow_id)
-		self.id += self.g(flow_id) * flow_id % self.p
+		self.id += self.g(flow_id) * flow_id 
 
 	def delete(self, flow_id, cnt):
 		self.count -= cnt
@@ -32,7 +37,6 @@ class Bucket() :
 	def get_sumid_and_count(self) :
 		sum_id = self.id * power(self.count, self.p - 2, self.p)
 		return sum_id, self.count
-
 
 def power(a,b,p) :
 	return pow(a, b, p)
