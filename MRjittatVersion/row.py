@@ -5,13 +5,14 @@ from MrJittacore import matrix_rank_finite_field, brute_force_k2_2d, inverse_mat
 import numpy as np
 
 class Rows() :
-	def __init__(self,m,p,k):
-		self.kbuckets = [Kbucket(k,p) for _ in range(m)]
+	def __init__(self,m,p,k,rc):
+		self.kbuckets = [Kbucket(k,p,rc) for _ in range(m)]
 		self.p = p
 		self.m = m
 		self._a = random.randint(1, p - 1)
 		self._b = random.randint(0, p - 1)
 		self.k = k
+		self.rc = rc
 		pass
 
 	def hash(self, f):
@@ -20,16 +21,18 @@ class Rows() :
 	def insert(self, f):
 		h = self.hash(f)
 		print(f,h)
-		self.kbuckets[h].insert(f)
-		return h
+		return self.kbuckets[h].insert(f)
+		# return h
 
 	def pure_verification(self, i) :
-		a = np.array([bucket.count for bucket in self.kbuckets[i].kbucket], dtype=int).reshape(-1, 1)
-		id = np.array([bucket.id for bucket in self.kbuckets[i].kbucket], dtype=int).reshape(-1, 1)
-		test = []
+		a = np.array([bucket.count for bucket in self.kbuckets[i].buckets], dtype=int).reshape(-1, 1)
+		id = np.array([bucket.id for bucket in self.kbuckets[i].buckets], dtype=int).reshape(-1, 1)
+		answer = []
 		# print(a)
-		for g in brute_force_k2_2d(self.k) :
+		count = 0
+		for g in brute_force_k2_2d(self.k,self.rc) :
 			g = np.array(g, dtype=int)
+
 			try :
 				inv = inverse_matrix(g)
 				c = (inv @ a)
@@ -51,13 +54,19 @@ class Rows() :
 					if self.hash(int(f[idx][0])) != i :
 						flag = False
 						break
+				for j in range(len(g)) :
+					for k in range(len(f)):
+						# print(f"g[{j}][{k}] = {g[j][k]}, bucket.g({int(f[k][0])}) = {self.kbuckets[i].buckets[j].g(int(f[k][0]))}")
+						if self.kbuckets[i].buckets[j].g(int(f[k][0])) != g[j][k] :
+							flag = False
+							break
 				if flag :
 					print(f"found pure: {f.flatten()}, count: {c.flatten()}")
-					return [(int(f[idx][0]), int(c[idx][0])) for idx in range(len(f))]
+					answer.append( [(int(f[idx][0]), int(c[idx][0])) for idx in range(len(f))])
 			except np.linalg.LinAlgError : 
 				# print("not invertible")
 				pass
-		return []
+		return answer
 	
 
 	

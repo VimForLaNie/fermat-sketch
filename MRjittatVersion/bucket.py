@@ -1,25 +1,26 @@
 import random
-max_rc = 4
 class Bucket() :
-	def __init__(self,p):
+	def __init__(self,p,rc):
 		self.count = 0
 		self.id = 0
 		self.p = p
-		self._a = random.randint(1, max_rc)
-		self._b = random.randint(1, max_rc)
+		self.rc = rc
+		self._a = random.randint(1, rc)
+		self._b = random.randint(1, rc)
 		pass
 	
 	def g(self, x) :
 		# arr = [1,2,3,4]
-		arr = [i for i in range(1,max_rc+1)]
-		return arr[(self._a * x + self._b) % (max_rc)]
-		# return x % max_rc
+		arr = [i for i in range(1,self.rc+1)]
+		return arr[(self._a * x + self._b) % (self.rc)]
+		# return x % rc
 		# return arr[x % len(arr)]
 
 	def insert(self, flow_id):
 		print(f"g({flow_id}) = ",self.g(flow_id))
 		self.count += self.g(flow_id)
 		self.id += self.g(flow_id) * flow_id 
+		return self.g(flow_id)
 
 	def delete(self, flow_id, cnt):
 		self.count -= cnt

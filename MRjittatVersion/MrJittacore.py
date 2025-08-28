@@ -52,11 +52,11 @@ def matrix_rank_finite_field(matrix, p):
 
 from itertools import product
 
-def brute_force_k2_2d(k):
-    length = k * k   # total elements
-    for combo in product(range(k), repeat=length):
-        # reshape tuple -> k x k matrix
+def brute_force_k2_2d(k,rc):
+    length = k * k
+    for combo in product(range(1, rc+1), repeat=length):  # 1..k instead of 0..k-1
         matrix = [list(combo[i*k:(i+1)*k]) for i in range(k)]
+        # print(f"Trying matrix: {matrix}")
         yield matrix
         
 import numpy as np

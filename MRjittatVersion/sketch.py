@@ -3,10 +3,10 @@ from collections import deque, defaultdict
 
 
 class Sketch :
-	def __init__(self, rows_cnt, buckets_cnt, p,k) :
+	def __init__(self, rows_cnt, buckets_cnt, p,k,rc) :
 		self.rows_cnt = rows_cnt
 		self.p = p
-		self.rows = [Rows(buckets_cnt, p,k) for _ in range(rows_cnt)]
+		self.rows = [Rows(buckets_cnt, p,k,rc) for _ in range(rows_cnt)]
 		self.pure_elements = []
 		self.flowset = defaultdict(int)
 		self.k = k
@@ -16,7 +16,7 @@ class Sketch :
 		checked_pure = set()
 		for i, row in enumerate(self.rows):
 			for j, kbucket in enumerate(row.kbuckets):
-				if kbucket.kbucket[0].count != 0:
+				if kbucket.buckets[0].count != 0:
 					queue.append((i, j))
 		
 		while queue:
