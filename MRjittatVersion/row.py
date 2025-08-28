@@ -32,7 +32,10 @@ class Rows() :
 		count = 0
 		for g in brute_force_k2_2d(self.k,self.rc) :
 			g = np.array(g, dtype=int)
-
+			rank =  np.linalg.matrix_rank(g)
+			# print("rank",rank)
+			if rank < 3 :
+				continue
 			try :
 				inv = inverse_matrix(g)
 				c = (inv @ a)

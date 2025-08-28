@@ -55,6 +55,7 @@ from itertools import product
 def brute_force_k2_2d(k,rc):
     length = k * k
     for combo in product(range(1, rc+1), repeat=length):  # 1..k instead of 0..k-1
+    # for combo in product([2,3,5,7,11,13,17,19][:rc], repeat=length):  # 1..k instead of 0..k-1
         matrix = [list(combo[i*k:(i+1)*k]) for i in range(k)]
         # print(f"Trying matrix: {matrix}")
         yield matrix
@@ -71,5 +72,4 @@ def inverse_matrix(matrix):
     Returns:
         np.ndarray: The inverse matrix.
     """
-    mat = np.array(matrix, dtype=float)
-    return np.linalg.inv(mat)
+    return np.linalg.inv(matrix)

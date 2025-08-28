@@ -5,13 +5,14 @@ class Bucket() :
 		self.id = 0
 		self.p = p
 		self.rc = rc
-		self._a = random.randint(1, rc)
-		self._b = random.randint(1, rc)
+		self._a = random.randint(1, p - 1)
+		self._b = random.randint(0, p - 1)
 		pass
 	
 	def g(self, x) :
 		# arr = [1,2,3,4]
 		arr = [i for i in range(1,self.rc+1)]
+		# arr = [419,569,241,151,29,13]
 		return arr[(self._a * x + self._b) % (self.rc)]
 		# return x % rc
 		# return arr[x % len(arr)]
