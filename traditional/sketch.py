@@ -1,4 +1,7 @@
-class Bucket() :
+import random
+from collections import deque, defaultdict
+
+class Bucket():
 	def __init__(self,p):
 		self.count = 0
 		self.id = 0
@@ -29,8 +32,6 @@ class Bucket() :
 def power(a,b,p) :
 	return pow(a, b, p)
 
-import random
-
 class Rows() :
 	def __init__(self,size,p):
 		self.size = size
@@ -53,7 +54,6 @@ class Rows() :
 		h = self.hash(f)
 		self.buckets[h].delete(f,cnt)
 			
-from collections import deque, defaultdict
 
 class Sketch :
 	def __init__(self, rows_cnt, buckets_cnt, p) :

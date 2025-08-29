@@ -1,6 +1,7 @@
 from collections import deque, defaultdict
-import numpy as np
+from itertools import product
 import random
+import numpy as np
 
 prime = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]
 class Bucket() :
@@ -49,7 +50,6 @@ class Bucket() :
 def power(a,b,p) :
 	return pow(a, b, p)
 
-import random
 class Kbucket() :
 	def __init__(self,k,p,rc):
 		self.buckets = [Bucket(p,rc,k) for _ in range(k)]
@@ -69,11 +69,6 @@ class Kbucket() :
 	def get_count(self) :
 		return [bucket.count for bucket in self.buckets]
 
-import random
-import numpy as np
-
-from itertools import product
-
 def brute_force_k2_2d(k,rc):
     length = k * k
     prime = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]
@@ -84,8 +79,6 @@ def brute_force_k2_2d(k,rc):
         # print(f"Trying matrix: {matrix}")
         yield matrix
         
-import numpy as np
-
 def inverse_matrix(matrix, p = None):
     """
     Compute the inverse of a matrix using NumPy.

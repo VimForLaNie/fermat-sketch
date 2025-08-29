@@ -1,9 +1,9 @@
 from traditional.sketch import Sketch as Sketch_Traditional
 from MRjittatVersion.sketch import Sketch as Sketch_Mrjittat
-import random
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import Counter
+from data_generator import gen_data
 
 def calculate_accuracy(flow, s):
     flow_counter = Counter(flow)  # ground truth
@@ -25,20 +25,21 @@ def calculate_accuracy(flow, s):
 
     return accuracy, fn_rate, fp_rate
 
-
-def run_experiment(element_counts, trials=5, rows=3, buckets=500, k=2):
+def run_experiment(flow_id_ranges, victim_flow_ratio=0.2, packet_loss_rate=0.1, packets_per_flow=10000, 
+                  trials=5, trad_rows=3, trad_buckets=500, mrjittat_rows=3, mrjittat_buckets=500, 
+                  mrjittat_k=2):
     results = {"Traditional": {"acc": [], "fn": [], "fp": []},
                "MrJittat": {"acc": [], "fn": [], "fp": []}}
 
-    for element_count in element_counts:
+    for flow_id_range in flow_id_ranges:
         acc1, fn1, fp1 = [], [], []
         acc2, fn2, fp2 = [], [], []
 
         for _ in range(trials):
-            flow = random.choices(range(1, 1000), k=element_count)
+            flow = gen_data(flow_id_range, victim_flow_ratio, packet_loss_rate, packets_per_flow)
 
-            sketch_trad = Sketch_Traditional(rows, buckets, p=int(1e9 + 7))
-            sketch_jt = Sketch_Mrjittat(1, buckets, p=int(1e9 + 7), k=k, rc=rows)
+            sketch_trad = Sketch_Traditional(trad_rows, trad_buckets, p=int(1e9 + 7))
+            sketch_jt = Sketch_Mrjittat(1, mrjittat_buckets, p=int(1e9 + 7), k=mrjittat_k, rc=mrjittat_rows)
 
             for f in flow:
                 sketch_trad.insert(f)
@@ -69,33 +70,51 @@ def run_experiment(element_counts, trials=5, rows=3, buckets=500, k=2):
 
     return results
 
-
-def plot_results(element_counts, results, metric="acc"):
-    plt.figure(figsize=(8, 5))
+def plot_results(flow_id_ranges, results, metric="acc"):
+    plt.figure(figsize=(10, 6))
 
     means1 = [m for m, _ in results["Traditional"][metric]]
     stds1 = [s for _, s in results["Traditional"][metric]]
     means2 = [m for m, _ in results["MrJittat"][metric]]
     stds2 = [s for _, s in results["MrJittat"][metric]]
 
-    plt.errorbar(element_counts, means1, yerr=stds1, fmt='-o', capsize=4, label="Traditional Sketch")
-    plt.errorbar(element_counts, means2, yerr=stds2, fmt='-s', capsize=4, label="MrJittat Sketch")
+    plt.errorbar(flow_id_ranges, means1, yerr=stds1, fmt='-o', capsize=4, label="Traditional Sketch")
+    plt.errorbar(flow_id_ranges, means2, yerr=stds2, fmt='-s', capsize=4, label="MrJittat Sketch")
 
     ylabel_map = {"acc": "Accuracy", "fn": "False Negative Rate", "fp": "False Positive Rate"}
-    plt.xlabel("Number of Elements", fontsize=12)
+    plt.xlabel("Flow ID Range", fontsize=12)
     plt.ylabel(ylabel_map[metric], fontsize=12)
-    plt.title(f"Comparison of {ylabel_map[metric]} vs Flow Size", fontsize=14)
+    plt.title(f"Comparison of {ylabel_map[metric]} vs Flow ID Range", fontsize=14)
     plt.legend()
     plt.grid(True, linestyle="--", alpha=0.7)
     plt.tight_layout()
     plt.show()
 
+# Sketch sizing parameters
+SKETCH_CONFIG = {
+    'trad_rows': 3,
+    'trad_buckets': 500,
+    'mrjittat_rows': 3,
+    'mrjittat_buckets': 500,
+    'mrjittat_k': 2
+}
+
+# Data generation parameters
+DATA_CONFIG = {
+    'victim_flow_ratio': 0.2,
+    'packet_loss_rate': 0.1,
+    'packets_per_flow': 10000,
+    'trials': 5
+}
 
 # Parameters
-element_counts = [500 * i for i in range(1, 6)]
-data_list = [gen_data(10000, victim_flow_ratio=0.2, packet_loss_rate=0.1, total_packets=count) for count in element_counts]
-results = run_experiment(element_counts, trials=5, rows=2, buckets=300, k=2)
+flow_id_ranges = [1000, 2000, 3000, 4000, 5000]
+results = run_experiment(
+    flow_id_ranges=flow_id_ranges,
+    **DATA_CONFIG,
+    **SKETCH_CONFIG
+)
 
 # Plot all metrics
 for metric in ["acc", "fn", "fp"]:
-    plot_results(element_counts, results, metric)
+    plot_results(flow_id_ranges, results, metric)
