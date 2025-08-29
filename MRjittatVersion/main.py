@@ -1,7 +1,7 @@
 from sketch import Sketch
 from collections import Counter
 import random
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 
 def check_flow_result(flow, s, verbose=True):

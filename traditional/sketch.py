@@ -1,6 +1,59 @@
-from collections import deque, defaultdict
-from .row import Rows
+class Bucket() :
+	def __init__(self,p):
+		self.count = 0
+		self.id = 0
+		self.p = p
 
+	def insert(self, flow_id):
+		self.count += 1
+		self.id = (self.id + flow_id) % self.p
+
+	def delete(self, flow_id, cnt):
+		self.count -= cnt
+		self.id = (self.id - flow_id) % self.p
+				
+
+	def is_pure(self, j , hash, f = None) :
+		if self.count <= 0 :
+			return False
+		f_prime = self.id * power(self.count,self.p -2,self.p)
+		if hash(f_prime) != j :
+			return False
+		return True
+
+	def get_sumid_and_count(self) :
+		sum_id = self.id * power(self.count, self.p - 2, self.p)
+		return sum_id, self.count
+
+
+def power(a,b,p) :
+	return pow(a, b, p)
+
+import random
+
+class Rows() :
+	def __init__(self,size,p):
+		self.size = size
+		self.buckets = [Bucket(p) for _ in range(size)]
+		self._a = random.randint(1, p - 1)
+		self._b = random.randint(0, p - 1)
+		self.p = p
+		self.bucket_size = size
+
+	def hash(self, f):
+		return ((self._a * f + self._b) % self.p) % self.bucket_size
+
+	def insert(self, f):
+		h = self.hash(f)
+		self.buckets[h].insert(f)
+		return h
+
+	
+	def delete(self, f, cnt) :
+		h = self.hash(f)
+		self.buckets[h].delete(f,cnt)
+			
+from collections import deque, defaultdict
 
 class Sketch :
 	def __init__(self, rows_cnt, buckets_cnt, p) :
@@ -37,5 +90,3 @@ class Sketch :
 					h = row2.hash(f_prime)
 					row2.buckets[h].delete(f_prime, count)
 		return dict(self.flowset)
-
-
