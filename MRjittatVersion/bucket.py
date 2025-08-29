@@ -1,31 +1,35 @@
 import random
+
+prime = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]
 class Bucket() :
-	def __init__(self,p,rc):
+	def __init__(self,p,rc,k):
 		self.count = 0
 		self.id = 0
 		self.p = p
 		self.rc = rc
 		self._a = random.randint(1, p - 1)
 		self._b = random.randint(0, p - 1)
+		self.k = k
+		# print("Bucket init _a",self._a,"_b",self._b)
 		pass
 	
-	def g(self, x) :
-		# arr = [1,2,3,4]
-		arr = [i for i in range(1,self.rc+1)]
+	def g(self, f, i) :
+		arr = [[prime[i + j * self.rc] for i in range(self.rc)] for j in range(self.rc)]
+		# print("g array",arr)
 		# arr = [419,569,241,151,29,13]
-		return arr[(self._a * x + self._b) % (self.rc)]
-		# return x % rc
-		# return arr[x % len(arr)]
+		return arr[i][(self._a * f + self._b) % self.p % (self.rc)]
 
-	def insert(self, flow_id):
-		print(f"g({flow_id}) = ",self.g(flow_id))
-		self.count += self.g(flow_id)
-		self.id += self.g(flow_id) * flow_id 
-		return self.g(flow_id)
 
-	def delete(self, flow_id, cnt):
+	def insert(self, flow_id, i):
+		# print(f"g({flow_id}) = ",self.g(flow_id,i))
+		self.count += self.g(flow_id,i)
+		self.id += self.g(flow_id,i) * flow_id 
+		return self.g(flow_id,i)
+
+	def delete(self, flow_id, cnt,i):
 		self.count -= cnt
-		self.id = (self.id - self.g(flow_id) * flow_id * cnt) % self.p 
+		self.id = (self.id - self.g(flow_id,i) * flow_id * cnt) % self.p 
+	
 				
 
 	# def is_pure(self, j , hash, f = None) :

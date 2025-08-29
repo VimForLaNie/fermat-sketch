@@ -1,5 +1,5 @@
-from row import Rows
 from collections import deque, defaultdict
+from .row import Rows
 
 
 class Sketch :
@@ -9,6 +9,10 @@ class Sketch :
 		self.rows = [Rows(buckets_cnt, p) for _ in range(rows_cnt)]
 		self.pure_elements = []
 		self.flowset = defaultdict(int)
+
+	def insert(self,f) :
+		for row in self.rows:
+			row.insert(f)
 
 	def verify(self):
 		queue = deque()

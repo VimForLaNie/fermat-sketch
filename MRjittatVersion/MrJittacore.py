@@ -54,15 +54,17 @@ from itertools import product
 
 def brute_force_k2_2d(k,rc):
     length = k * k
-    for combo in product(range(1, rc+1), repeat=length):  # 1..k instead of 0..k-1
+    prime = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]
+    for combo in product(range(0, rc), repeat=length):  # 1..k instead of 0..k-1
     # for combo in product([2,3,5,7,11,13,17,19][:rc], repeat=length):  # 1..k instead of 0..k-1
         matrix = [list(combo[i*k:(i+1)*k]) for i in range(k)]
+        matrix = [[prime[matrix[i][j] + i * rc] for j in range(k)] for i in range(k)]
         # print(f"Trying matrix: {matrix}")
         yield matrix
         
 import numpy as np
 
-def inverse_matrix(matrix):
+def inverse_matrix(matrix, p = None):
     """
     Compute the inverse of a matrix using NumPy.
     
@@ -72,4 +74,12 @@ def inverse_matrix(matrix):
     Returns:
         np.ndarray: The inverse matrix.
     """
-    return np.linalg.inv(matrix)
+    if p is not None :
+        matrix = np.array(matrix, dtype=int) % p
+        inv = np.linalg.inv(matrix).astype(int) % p
+        for i in range(len(inv)) :
+            for j in range(len(inv)) :
+                inv[i][j] = inv[i][j] % p
+        return inv
+    else :
+        return np.linalg.inv(matrix)
