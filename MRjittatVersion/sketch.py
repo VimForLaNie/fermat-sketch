@@ -1,4 +1,4 @@
-from .row import Rows
+from row import Rows
 from collections import deque, defaultdict
 import numpy as np
 
@@ -18,7 +18,7 @@ class Sketch :
 		stop = 0
 		for i, row in enumerate(self.rows):
 			for j, kbucket in enumerate(row.kbuckets):
-				if kbucket.buckets[0].count != 0:
+				if kbucket.buckets[0].count > 0:
 					queue.append((i, j))
 		
 		while len(queue) > 0:

@@ -1,7 +1,7 @@
 import random
-from .bucket import Bucket
-from .kbucket import Kbucket
-from .MrJittacore import matrix_rank_finite_field, brute_force_k2_2d, inverse_matrix
+from bucket import Bucket
+from kbucket import Kbucket
+from MrJittacore import matrix_rank_finite_field, brute_force_k2_2d, inverse_matrix
 import numpy as np
 
 class Rows() :

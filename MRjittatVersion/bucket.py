@@ -27,7 +27,9 @@ class Bucket() :
 		return self.g(flow_id,i)
 
 	def delete(self, flow_id, cnt,i):
-		self.count -= cnt
+		if self.count < cnt * self.g(flow_id,i) :
+			self.count = 0
+		self.count -= cnt * self.g(flow_id,i)
 		self.id = (self.id - self.g(flow_id,i) * flow_id * cnt) % self.p 
 	
 				

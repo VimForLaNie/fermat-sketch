@@ -39,7 +39,7 @@ def run_experiment(element_counts, trials=5, rows=3, buckets=500, k=2):
             flow = random.choices(range(1, 1000), k=element_count)
 
             sketch_trad = Sketch_Traditional(rows, buckets, p=int(1e9 + 7))
-            sketch_jt = Sketch_Mrjittat(1, buckets, p=int(1e9 + 7), k=k, rc=rows)
+            sketch_jt = Sketch_Mrjittat(1, buckets, p=int(1e9 + 7), k=k, rc=3)
 
             for f in flow:
                 sketch_trad.insert(f)
@@ -93,8 +93,8 @@ def plot_results(element_counts, results, metric="acc"):
 
 
 # Parameters
-element_counts = [500 * i for i in range(1, 6)]
-results = run_experiment(element_counts, trials=5, rows=2, buckets=300, k=2)
+element_counts = [300 * i for i in range(1, 6)]
+results = run_experiment(element_counts, trials=5, rows=2, buckets=2000, k=2)
 
 # Plot all metrics
 for metric in ["acc", "fn", "fp"]:
