@@ -5,7 +5,7 @@
 #include <deque>
 #include <unordered_map>
 #include "./row.h"
-
+using namespace std;
 class Sketch
 {
 private:
@@ -70,6 +70,7 @@ public:
 		{
 			auto [i, j] = queue.front();
 			queue.pop_front();
+			// cout << "queue size: " << queue.size() << "\n";
 
 			auto counts = rows[i].kbuckets[j].get_count();
 			bool all_zero = true;

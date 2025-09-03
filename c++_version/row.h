@@ -9,7 +9,7 @@
 
 #include "./kbucket.h"	  // must provide Kbucket and getBuckets()
 #include "./jittatcore.h" // must provide MatrixUtils::brute_force_k2_2d(...)
-
+using namespace std;
 class Rows
 {
 private:
@@ -98,6 +98,7 @@ public:
 
 			// brute-force candidate g matrices (each is vector<vector<int>> of size kk x kk)
 			std::vector<std::vector<std::vector<int>>> g_list = MatrixUtils::brute_force_k2_2d(kk, rc);
+			// cout << "Trying kk=" << kk << " with " << g_list.size() << " candidates\n";
 
 			for (const auto &g_mat_vec : g_list)
 			{
@@ -133,9 +134,9 @@ public:
 					Eigen::MatrixXd c_diag = c_int.cast<double>().asDiagonal();
 					Eigen::MatrixXd gc = g_d * c_diag;
 
-					// need gc invertible
-					if (Eigen::FullPivLU<Eigen::MatrixXd>(gc).rank() < kk)
-						continue;
+					// // need gc invertible
+					// if (Eigen::FullPivLU<Eigen::MatrixXd>(gc).rank() < kk)
+					// 	continue;
 
 					Eigen::MatrixXd gc_inv = gc.inverse();
 					Eigen::MatrixXd f_d = gc_inv * id_mat.cast<double>();

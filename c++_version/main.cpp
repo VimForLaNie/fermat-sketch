@@ -5,11 +5,11 @@
 int main()
 {
 	// Parameters
-	int rows_cnt = 3;	 // number of rows
-	int buckets_cnt = 8; // number of buckets per row
-	long long p = 199;	 // prime modulus
-	int k = 3;			 // number of sub-buckets
-	int rc = 2;			 // range for g()
+	int rows_cnt = 2;	   // number of rows
+	int buckets_cnt = 400; // number of buckets per row
+	long long p = 1e9 + 7; // prime modulus
+	int k = 2;			   // number of sub-buckets
+	int rc = 20;		   // range for g()
 
 	// Create sketch
 	Sketch sketch(rows_cnt, buckets_cnt, p, k, rc);
