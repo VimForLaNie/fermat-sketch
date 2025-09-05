@@ -35,14 +35,35 @@ private:
 		return M;
 	}
 
-	// Helper: round Eigen::MatrixXd to Eigen::MatrixXi
-	static inline Eigen::MatrixXi roundMatrix(const Eigen::MatrixXd &mat)
+	// round if every entry is within tol of an integer
+	static inline bool roundIfClose(const Eigen::MatrixXd &M, Eigen::MatrixXi &out, double atol = 1e-8, double rtol = 1e-8)
 	{
-		Eigen::MatrixXi out(mat.rows(), mat.cols());
-		for (int i = 0; i < mat.rows(); ++i)
-			for (int j = 0; j < mat.cols(); ++j)
-				out(i, j) = static_cast<int>(std::llround(mat(i, j)));
-		return out;
+		out.resize(M.rows(), M.cols());
+		for (int i = 0; i < M.rows(); ++i)
+		{
+			for (int j = 0; j < M.cols(); ++j)
+			{
+				double v = M(i, j);
+				long long r = std::llround(v);
+				double tol = atol + rtol * std::max(1.0, std::abs(v));
+				if (std::abs(v - static_cast<double>(r)) > tol)
+					return false;
+				out(i, j) = static_cast<int>(r);
+			}
+		}
+		return true;
+	}
+
+	// exact integer equality check
+	static inline bool equalInt(const Eigen::MatrixXi &A, const Eigen::MatrixXi &B)
+	{
+		if (A.rows() != B.rows() || A.cols() != B.cols())
+			return false;
+		for (int i = 0; i < A.rows(); ++i)
+			for (int j = 0; j < A.cols(); ++j)
+				if (A(i, j) != B(i, j))
+					return false;
+		return true;
 	}
 
 public:
@@ -76,10 +97,9 @@ public:
 	// Pure verification - tries sizes kk=k..1 (like python)
 	std::vector<std::pair<int, int>> pure_verification(int i)
 	{
-		// result: vector of (flow_id, count)
 		std::vector<std::pair<int, int>> answer;
 
-		// get reference to the Kbucket's buckets
+		// get reference to the Kbucket's buckets (assumes getBuckets() exists)
 		const std::vector<Bucket> &buckets = kbuckets.at(i).getBuckets();
 
 		// Try decreasing kk from k down to 1
@@ -89,7 +109,7 @@ public:
 			Eigen::MatrixXi a_mat(kk, 1);
 			Eigen::MatrixXi id_mat(kk, 1);
 
-			// fill from bucket getters (use getters, not public fields)
+			// fill from bucket getters (do NOT access private members directly)
 			for (int idx = 0; idx < kk; ++idx)
 			{
 				a_mat(idx, 0) = static_cast<int>(buckets[idx].count);
@@ -98,95 +118,98 @@ public:
 
 			// brute-force candidate g matrices (each is vector<vector<int>> of size kk x kk)
 			std::vector<std::vector<std::vector<int>>> g_list = MatrixUtils::brute_force_k2_2d(kk, rc);
-			// cout << "Trying kk=" << kk << " with " << g_list.size() << " candidates\n";
 
 			for (const auto &g_mat_vec : g_list)
 			{
-				// convert to Eigen matrix
-				Eigen::MatrixXi g = vectorToEigen(g_mat_vec, kk, kk);
+				// convert to Eigen integer matrix and to double
+				Eigen::MatrixXi g_int = vectorToEigen(g_mat_vec, kk, kk);
+				Eigen::MatrixXd g_d = g_int.cast<double>();
 
-				// check rank
-				if (g.cast<double>().fullPivLu().rank() < kk)
+				// check rank/invertibility (over reals; FullPivLU requires non-integer scalar)
+				Eigen::FullPivLU<Eigen::MatrixXd> fu_g(g_d);
+				if (fu_g.rank() < kk || !fu_g.isInvertible())
 					continue;
 
-				// Solve c = inv(g) * a
-				// use double for numeric computations then round/validate
-				Eigen::MatrixXd g_d = g.cast<double>();
-				// guard: if g is ill-conditioned inverse may be unstable; try-catch anyway
-				try
+				// Solve for c in doubles: g_d * c_d = a_mat
+				Eigen::MatrixXd c_d = fu_g.solve(a_mat.cast<double>());
+
+				// Must be near-integer
+				Eigen::MatrixXi c_int;
+				if (!roundIfClose(c_d, c_int))
+					continue;
+
+				// Non-negative counts
+				bool any_negative = false;
+				for (int r = 0; r < c_int.rows(); ++r)
 				{
-					Eigen::MatrixXd g_inv = g_d.inverse();
-					Eigen::MatrixXd c_d = g_inv * a_mat.cast<double>();
-
-					// integer & non-negative check (round)
-					Eigen::MatrixXi c_int = roundMatrix(c_d);
-					bool any_negative = false;
-					for (int r = 0; r < c_int.rows(); ++r)
-						if (c_int(r, 0) < 0)
-						{
-							any_negative = true;
-							break;
-						}
-					if (any_negative)
-						continue;
-
-					// build diag(c) and compute f = inv(G * diag(c)) * id
-					Eigen::MatrixXd c_diag = c_int.cast<double>().asDiagonal();
-					Eigen::MatrixXd gc = g_d * c_diag;
-
-					// // need gc invertible
-					// if (Eigen::FullPivLU<Eigen::MatrixXd>(gc).rank() < kk)
-					// 	continue;
-
-					Eigen::MatrixXd gc_inv = gc.inverse();
-					Eigen::MatrixXd f_d = gc_inv * id_mat.cast<double>();
-
-					Eigen::MatrixXi f_int = roundMatrix(f_d);
-
-					// verify hash constraint: each recovered flow must hash to bucket i
-					bool ok = true;
-					for (int idx = 0; idx < f_int.rows(); ++idx)
+					if (c_int(r, 0) < 0)
 					{
-						int flow_candidate = f_int(idx, 0);
-						if (hash(flow_candidate) != i)
+						any_negative = true;
+						break;
+					}
+				}
+				if (any_negative)
+					continue;
+
+				// Verify exact integer equation: g_int * c_int == a_mat
+				Eigen::MatrixXi a_check = g_int * c_int;
+				if (!equalInt(a_check, a_mat))
+					continue;
+
+				// build gc = g * diag(c_int) (double)
+				Eigen::MatrixXd c_diag = c_int.cast<double>().asDiagonal();
+				Eigen::MatrixXd gc_d = g_d * c_diag;
+
+				// check invertibility of gc
+				Eigen::FullPivLU<Eigen::MatrixXd> fu_gc(gc_d);
+				if (fu_gc.rank() < kk || !fu_gc.isInvertible())
+					continue;
+
+				// Solve for f_d: gc_d * f_d = id_mat
+				Eigen::MatrixXd f_d = fu_gc.solve(id_mat.cast<double>());
+
+				// f must be near-integer
+				Eigen::MatrixXi f_int;
+				if (!roundIfClose(f_d, f_int))
+					continue;
+
+				// verify hash constraint: each recovered flow must hash to bucket i
+				bool ok = true;
+				for (int idx = 0; idx < f_int.rows(); ++idx)
+				{
+					int flow_candidate = f_int(idx, 0);
+					if (hash(flow_candidate) != i)
+					{
+						ok = false;
+						break;
+					}
+				}
+				if (!ok)
+					continue;
+
+				// verify g-consistency: buckets[row].g(flow_candidate, row) == g_int(row,col)
+				for (int row = 0; row < kk && ok; ++row)
+				{
+					for (int col = 0; col < kk; ++col)
+					{
+						int flow_candidate = f_int(col, 0);
+						// Bucket::g must be const-qualified
+						if (buckets[row].g(flow_candidate, row) != g_int(row, col))
 						{
 							ok = false;
 							break;
 						}
 					}
-					if (!ok)
-						continue;
-
-					// verify g-consistency: buckets[row].g(flow_candidate, row) == g(row,col)
-					for (int row = 0; row < kk && ok; ++row)
-					{
-						for (int col = 0; col < kk; ++col)
-						{
-							int flow_candidate = f_int(col, 0);
-							// Bucket::g must be const-qualified
-							if (buckets[row].g(flow_candidate, row) != g(row, col))
-							{
-								ok = false;
-								break;
-							}
-						}
-					}
-					if (!ok)
-						continue;
-
-					// success: collect (flow, count) pairs
-					answer.reserve(static_cast<size_t>(kk));
-					for (int j = 0; j < kk; ++j)
-					{
-						answer.emplace_back(f_int(j, 0), c_int(j, 0));
-					}
-					return answer; // same behavior as Python: return first valid decoding
 				}
-				catch (const std::exception &)
-				{
-					// numeric error / inverse failure -> skip candidate
+				if (!ok)
 					continue;
+
+				// success: collect (flow, count) pairs
+				for (int j = 0; j < kk; ++j)
+				{
+					answer.emplace_back(f_int(j, 0), c_int(j, 0));
 				}
+				return answer; // return the first valid decoding (same as Python)
 			} // end g_list
 		} // end kk loop
 
