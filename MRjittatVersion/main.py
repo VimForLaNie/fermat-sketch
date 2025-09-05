@@ -18,7 +18,7 @@ def experiment_buckets(rows_cnt, buckets_list, element_range, element_counts, tr
 
 		for _ in range(trials):
 			# print("trial:",_ )
-			sketch = Sketch(rows_cnt, buckets_cnt, p, k=2,rc =3)
+			sketch = Sketch(rows_cnt, buckets_cnt, p, k=2,rc =10)
 
 			# Generate random elements
 			# elements = random.sample(range(1, element_range), k=element_counts)
@@ -115,10 +115,10 @@ def plot_results_buckets(buckets_list, fp_list, fn_list,acc):
 	plt.show()
 
 debug = False
-bucket_list = [100 * i for i in range(1, 20)]
+bucket_list = [100 * i for i in range(1, 5)]
 element_range = 10000
 element_counts = 100
-trials = 300
+trials = 5
 fp_list, fn_list ,acc = experiment_buckets(2, bucket_list, element_range, element_counts, trials)
 plot_results_buckets(bucket_list, fp_list, fn_list,acc)
 

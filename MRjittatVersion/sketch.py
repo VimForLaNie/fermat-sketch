@@ -1,4 +1,4 @@
-from row import Rows
+from .row import Rows
 from collections import deque, defaultdict
 import numpy as np
 

@@ -1,7 +1,7 @@
 import random
-from bucket import Bucket
-from kbucket import Kbucket
-from MrJittacore import matrix_rank_finite_field, brute_force_k2_2d, inverse_matrix
+from .bucket import Bucket
+from .kbucket import Kbucket
+from .MrJittacore import  brute_force_k2_2d, inverse_matrix
 import numpy as np
 
 class Rows() :
@@ -29,16 +29,16 @@ class Rows() :
 		answer = []
 		# print(a)
 		count = 0
-		for kk in range(1,self.k + 1) :
+		for kk in range(self.k, 0, -1) :
 			a = np.array([bucket.count for bucket in self.kbuckets[i].buckets][:kk], dtype=int).reshape(-1, 1)
 			id = np.array([bucket.id for bucket in self.kbuckets[i].buckets][:kk], dtype=int).reshape(-1, 1)
 			for g in brute_force_k2_2d(kk,self.rc) :
 				g = np.array(g, dtype=int)
 				# print("g",g)
-				# rank =  np.linalg.matrix_rank(g)
+				rank =  np.linalg.matrix_rank(g)
 				# print("rank",rank)
-				# if rank < 3 :
-				# 	continue
+				if rank < kk :
+					continue
 				try :
 					inv = inverse_matrix(g)
 					c = (inv @ a)

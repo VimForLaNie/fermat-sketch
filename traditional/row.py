@@ -1,5 +1,5 @@
 import random
-from bucket import Bucket
+from .bucket import Bucket
 class Rows() :
 	def __init__(self,size,p):
 		self.size = size

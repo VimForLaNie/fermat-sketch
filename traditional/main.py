@@ -1,4 +1,4 @@
-from sketch import Sketch
+from .sketch import Sketch
 from collections import Counter
 import random
 import matplotlib.pyplot as plt
@@ -117,7 +117,7 @@ if __name__ == "__main__":
 	# rows_list = [3]
 	# buckets_cnt = 10000
 	# # bucket_list = [ 500, 1000, 1500, 2000, 2500, 3000,4000 , 5000]  # varying buckets
-	bucket_list = [50 * i for i in range(1, 24)]
+	bucket_list = [100 * i for i in range(1, 24)]
 	element_range = 10000
 	# element_range_list = [20000 * i for i in range(1, 10)]  # varying element range
 	element_counts = 100

@@ -1,43 +1,43 @@
 import numpy as np
 
-def matrix_rank_finite_field(matrix, p):
-    """
-    Finds the rank of a matrix over a finite field modulo p.
+# def matrix_rank_finite_field(matrix, p):
+#     """
+#     Finds the rank of a matrix over a finite field modulo p.
 
-    Args:
-        matrix: A NumPy array representing the matrix.
-        p: The modulus of the finite field.
+#     Args:
+#         matrix: A NumPy array representing the matrix.
+#         p: The modulus of the finite field.
 
-    Returns:
-        The rank of the matrix.
-    """
-    # Make a copy to avoid modifying the original matrix
-    matrix = np.copy(matrix).astype(int)
+#     Returns:
+#         The rank of the matrix.
+#     """
+#     # Make a copy to avoid modifying the original matrix
+#     matrix = np.copy(matrix).astype(int)
 
-    rows, cols = matrix.shape
-    rank = 0
-    for col in range(cols):
-        pivot_row = rank
-        while pivot_row < rows and matrix[pivot_row, col] % p == 0:
-            pivot_row += 1
+#     rows, cols = matrix.shape
+#     rank = 0
+#     for col in range(cols):
+#         pivot_row = rank
+#         while pivot_row < rows and matrix[pivot_row, col] % p == 0:
+#             pivot_row += 1
 
-        if pivot_row < rows:
-            # Swap rows
-            matrix[[rank, pivot_row]] = matrix[[pivot_row, rank]]
+#         if pivot_row < rows:
+#             # Swap rows
+#             matrix[[rank, pivot_row]] = matrix[[pivot_row, rank]]
 
-            # Make the pivot element 1 (modulo p)
-            pivot_element = matrix[rank, col] % p
-            inv_pivot = pow(int(pivot_element), -1, p)
-            matrix[rank] = (matrix[rank] * inv_pivot) % p
+#             # Make the pivot element 1 (modulo p)
+#             pivot_element = matrix[rank, col] % p
+#             inv_pivot = pow(int(pivot_element), -1, p)
+#             matrix[rank] = (matrix[rank] * inv_pivot) % p
 
-            # Eliminate other rows
-            for i in range(rows):
-                if i != rank:
-                    factor = matrix[i, col] % p
-                    matrix[i] = (matrix[i] - factor * matrix[rank]) % p
-            rank += 1
+#             # Eliminate other rows
+#             for i in range(rows):
+#                 if i != rank:
+#                     factor = matrix[i, col] % p
+#                     matrix[i] = (matrix[i] - factor * matrix[rank]) % p
+#             rank += 1
 
-    return rank
+#     return rank
 
 # Example Usage:
 # matrix = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])

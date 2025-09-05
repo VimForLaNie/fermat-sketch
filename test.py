@@ -10,82 +10,68 @@ def calculate_accuracy(flow, s):
     flow_counter = Counter(flow)  # ground truth
     recovered_counter = Counter(s)
 
-    missing = {f: flow_counter[f] for f in flow_counter if f not in recovered_counter}
-    extra = {f: recovered_counter[f] for f in recovered_counter if f not in flow_counter}
-    mismatched = {f: (flow_counter[f], recovered_counter[f])
-                  for f in flow_counter if f in recovered_counter and flow_counter[f] != recovered_counter[f]}
     correct = {f: flow_counter[f] for f in flow_counter if f in recovered_counter and flow_counter[f] == recovered_counter[f]}
-
-    false_negatives = len(missing) + len(mismatched)
-    false_positives = len(extra)
     total_flows = len(flow_counter)
 
-    fn_rate = false_negatives / total_flows if total_flows > 0 else 0
-    fp_rate = false_positives / (false_positives + len(correct)) if (false_positives + len(correct)) > 0 else 0
     accuracy = len(correct) / total_flows if total_flows > 0 else 0
+    return accuracy
 
-    return accuracy, fn_rate, fp_rate
 
+def find_min_buckets(flow_size, target_acc=0.99, trials=5, rows=1, k=2, sketch_type="MrJittat"):
+    """
+    Gradually increase bucket count until target accuracy is reached.
+    Returns minimum bucket count required.
+    """
+    buckets = 10  # start small
+    max_buckets = 20000
 
-def run_experiment(element_counts, trials=5, rows=3, buckets=500, k=2):
-    results = {"Traditional": {"acc": [], "fn": [], "fp": []},
-               "MrJittat": {"acc": [], "fn": [], "fp": []}}
-
-    for element_count in element_counts:
-        acc1, fn1, fp1 = [], [], []
-        acc2, fn2, fp2 = [], [], []
-
+    while buckets <= max_buckets:
+        accuracies = []
         for _ in range(trials):
-            flow = random.choices(range(1, 1000), k=element_count)
+            flow = random.choices(range(1, 5000), k=flow_size)
 
-            sketch_trad = Sketch_Traditional(rows, buckets, p=int(1e9 + 7))
-            sketch_jt = Sketch_Mrjittat(1, buckets, p=int(1e9 + 7), k=k, rc=3)
+            if sketch_type == "Traditional":
+                sketch = Sketch_Traditional(rows, buckets, p=int(1e9 + 7))
+            else:
+                sketch = Sketch_Mrjittat(rows, buckets, p=int(1e9 + 7), k=k, rc=12)
 
             for f in flow:
-                sketch_trad.insert(f)
-                sketch_jt.insert(f)
+                sketch.insert(f)
+            recovered = sketch.verify()
 
-            s1 = sketch_trad.verify()
-            s2 = sketch_jt.verify()
+            acc = calculate_accuracy(flow, recovered)
+            # if sketch_type == "MrJittat":
+            #     print(f"Buckets: {buckets},  Accuracy: {acc:.4f}")
+            accuracies.append(acc)
 
-            a1, fnr1, fpr1 = calculate_accuracy(flow, s1)
-            a2, fnr2, fpr2 = calculate_accuracy(flow, s2)
+        mean_acc = np.mean(accuracies)
+        print(f"Buckets: {buckets},  Accuracy: {mean_acc:.4f}")
+        
+        if mean_acc >= target_acc:
+            return buckets  # found minimum bucket count
 
-            acc1.append(a1)
-            fn1.append(fnr1)
-            fp1.append(fpr1)
+        buckets *= 2  # exponential search
 
-            acc2.append(a2)
-            fn2.append(fnr2)
-            fp2.append(fpr2)
-
-        # average + std for error bars
-        results["Traditional"]["acc"].append((np.mean(acc1), np.std(acc1)))
-        results["Traditional"]["fn"].append((np.mean(fn1), np.std(fn1)))
-        results["Traditional"]["fp"].append((np.mean(fp1), np.std(fp1)))
-
-        results["MrJittat"]["acc"].append((np.mean(acc2), np.std(acc2)))
-        results["MrJittat"]["fn"].append((np.mean(fn2), np.std(fn2)))
-        results["MrJittat"]["fp"].append((np.mean(fp2), np.std(fp2)))
-
-    return results
+    return None  # not found within range
 
 
-def plot_results(element_counts, results, metric="acc"):
+def run_experiment(flow_sizes, trials=5, sketch_type="MrJittat"):
+    required_buckets = []
+    for flow_size in flow_sizes:
+        min_buckets = find_min_buckets(flow_size, target_acc=0.99, trials=trials, sketch_type=sketch_type)
+        required_buckets.append(min_buckets)
+        print(f"Flow size {flow_size}: needs {min_buckets} buckets for {sketch_type}")
+    return required_buckets
+
+
+def plot_required_buckets(flow_sizes, buckets_trad, buckets_jt):
     plt.figure(figsize=(8, 5))
+    plt.plot(flow_sizes, buckets_trad, '-o', label="Traditional Sketch")
+    plt.plot(flow_sizes, buckets_jt, '-s', label="MrJittat Sketch")
 
-    means1 = [m for m, _ in results["Traditional"][metric]]
-    stds1 = [s for _, s in results["Traditional"][metric]]
-    means2 = [m for m, _ in results["MrJittat"][metric]]
-    stds2 = [s for _, s in results["MrJittat"][metric]]
-
-    plt.errorbar(element_counts, means1, yerr=stds1, fmt='-o', capsize=4, label="Traditional Sketch")
-    plt.errorbar(element_counts, means2, yerr=stds2, fmt='-s', capsize=4, label="MrJittat Sketch")
-
-    ylabel_map = {"acc": "Accuracy", "fn": "False Negative Rate", "fp": "False Positive Rate"}
-    plt.xlabel("Number of Elements", fontsize=12)
-    plt.ylabel(ylabel_map[metric], fontsize=12)
-    plt.title(f"Comparison of {ylabel_map[metric]} vs Flow Size", fontsize=14)
+    plt.xlabel("Victim Flow Size (Number of Items)", fontsize=12)
+    plt.ylabel("Required Buckets (for ≥99.99% accuracy)", fontsize=12)
+    plt.title("Bucket Requirement vs Flow Size", fontsize=14)
     plt.legend()
     plt.grid(True, linestyle="--", alpha=0.7)
     plt.tight_layout()
@@ -93,9 +79,9 @@ def plot_results(element_counts, results, metric="acc"):
 
 
 # Parameters
-element_counts = [300 * i for i in range(1, 6)]
-results = run_experiment(element_counts, trials=5, rows=2, buckets=2000, k=2)
+flow_sizes = [10, 20, 40, 80, 160]
+buckets_trad = run_experiment(flow_sizes, trials=100, sketch_type="Traditional")
+buckets_jt = run_experiment(flow_sizes, trials=100, sketch_type="MrJittat")
 
-# Plot all metrics
-for metric in ["acc", "fn", "fp"]:
-    plot_results(element_counts, results, metric)
+# Plot results
+plot_required_buckets(flow_sizes, buckets_trad, buckets_jt)
