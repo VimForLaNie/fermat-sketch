@@ -1,8 +1,9 @@
 from sketch import Sketch
 from collections import Counter
 import random
-import matplotlib.pyplot as plt
 import numpy as np
+import time
+import csv
 
 def experiment_buckets(rows_cnt, buckets_list, element_range, element_counts, trials=5, p=int(1e9 + 7)):
 	mean_fp_list = []
@@ -51,15 +52,13 @@ def experiment_buckets(rows_cnt, buckets_list, element_range, element_counts, tr
 		mean_fn_list.append(sum(fn_trials) / trials)
 		mean_acc_list.append(sum(acc_trials) / trials)
 
-		if debug:
-			print(f"Buckets: {buckets_cnt}, Mean FP: {mean_fp_list[-1]:.4f}, Mean FN: {mean_fn_list[-1]:.4f}")
-
 	return mean_fp_list, mean_fn_list, mean_acc_list
 
 
-def check_flow_result(flow, s, verbose=True):
+def check_flow_result(flow, s, strict=True, verbose=True):
 	"""
 	Compare flow list with the recovered flowset dictionary and print summary.
+	If strict=True, returns True only if recovered matches ground truth exactly.
 	"""
 	flow_counter = Counter(flow)  # ground truth
 	recovered_counter = Counter(s)
@@ -94,75 +93,96 @@ def check_flow_result(flow, s, verbose=True):
 				print(f"   Flow {f}: got {c}")
 		print("=========================")
 
-	return {
-		"correct": correct,
-		"missing": missing,
-		"extra": extra,
-		"mismatched": mismatched
-	}
+	if strict:
+		return len(missing) == 0 and len(extra) == 0 and len(mismatched) == 0 and len(correct) == len(flow_counter)
+	else:
+		return {
+			"correct": correct,
+			"missing": missing,
+			"extra": extra,
+			"mismatched": mismatched
+		}
 
-def plot_results_buckets(buckets_list, fp_list, fn_list,acc):
-	plt.figure(figsize=(10, 6))
-	# plt.plot(buckets_list, fp_list, marker='o', label="Mean False Positive Rate")
-	# plt.plot(buckets_list, fn_list, marker='x', label="Mean False Negative Rate")
-	plt.plot(buckets_list, acc, marker='o', label="Accuracy Rate")
-	plt.xlabel("Number of Buckets")
-	plt.ylabel("Rate")
-	# plt.title("Mean False Positive / False Negative Rates vs. Number of Buckets")
-	plt.title("Accuracy Rate vs. Number of Buckets")
-	plt.legend()
-	plt.grid(True)
-	plt.show()
+def binary_search_min_buckets(rows_cnt, element_range, element_counts, trials, p=int(1e9 + 7), k=2, rc=10, verbose=False):
+	low = 1
+	high = element_counts * 10
+	min_buckets = None
+	best_success_rate = 0
+	best_decode_times = []
+	while low <= high:
+		mid = (low + high) // 2
+		success_count = 0
+		decode_times = []
+		for _ in range(trials):
+			sketch = Sketch(rows_cnt, mid, p, k=k, rc=rc)
+			elements = [random.randint(1, element_range) for _ in range(element_counts)]
+			original_counts = Counter(elements)
+			for elem in elements:
+				for row in range(rows_cnt):
+					sketch.rows[row].insert(elem)
+			start = time.time()
+			recovered = sketch.verify()
+			end = time.time()
+			decode_times.append(end - start)
+			if check_flow_result(elements, recovered, strict=True, verbose=False):
+				success_count += 1
+		success_rate = success_count / trials
+		if verbose:
+			print(f"Buckets: {mid}, Success rate: {success_rate:.4f}")
+		if success_rate >= 0.999:
+			min_buckets = mid
+			best_success_rate = success_rate
+			best_decode_times = decode_times.copy()
+			high = mid - 1
+		else:
+			low = mid + 1
+	return min_buckets, best_success_rate, best_decode_times
 
-debug = False
-bucket_list = [100 * i for i in range(1, 5)]
-element_range = 10000
-element_counts = 100
-trials = 5
-fp_list, fn_list ,acc = experiment_buckets(2, bucket_list, element_range, element_counts, trials)
-plot_results_buckets(bucket_list, fp_list, fn_list,acc)
+def experiment_find_min_buckets(rows_cnt, element_counts, element_range, trials=5, p=int(1e9 + 7), k=2, rc=3,
+								result_csv="min_buckets_results.csv", time_csv="decode_times.csv"):
+	# Open files in append mode, don't write headers
+	with open(result_csv, "a", newline='') as f_result, open(time_csv, "a", newline='') as f_time:
+		result_writer = csv.writer(f_result)
+		time_writer = csv.writer(f_time)
+		print(f"Finding min buckets for element_range={element_range} ...")
+		min_buckets, success_rate, decode_times = binary_search_min_buckets(
+			rows_cnt, element_range, element_counts, trials, p, k, rc, verbose=False
+		)
+		result_writer.writerow([element_counts, min_buckets, success_rate, rows_cnt, element_range, trials, k, rc])
+		for idx, t in enumerate(decode_times):
+			time_writer.writerow([element_counts, min_buckets, idx, t, rows_cnt, element_range, trials, k, rc])
+		print(f"element_counts={element_counts}, min_buckets={min_buckets}, success_rate={success_rate:.4f}")
 
-# rows_cnt = 1
-# buckets_cnt = 100
-# sketch = Sketch(rows_cnt,buckets_cnt=buckets_cnt,p= int(1e9 + 7),k=2,rc = 3)
-# flow =  random.choices(range(1, 100), k=100)
-# print("flow",flow)
+# debug = False
+# bucket_list = [100 * i for i in range(1, 5)]
+# element_range = 10000
+# element_counts = 100
+# trials = 5
+# fp_list, fn_list ,acc = experiment_buckets(2, bucket_list, element_range, element_counts, trials)
 
-# for f in flow :
-# 	sketch.insert(f)
+if __name__ == "__main__":
+	rows_cnt = 3
+	element_ranges = [20, 40, 60, 80, 100] 
+	element_counts = 2000
+	trials = 5
 
-# for row in sketch.rows :
-# 	for kbucket in row.kbuckets :
-# 		for bucket in kbucket.buckets :
-# 			print(bucket.count,bucket.id,end=" | ")
-# 		print(' || ', end='')
-# 	print()
+	# Use single result and time file for all ranges
+	result_csv = "min_buckets_results.csv"
+	time_csv = "decode_times.csv"
 
-# g_original = []
-# for row in sketch.rows :
-# 	for kbucket in row.kbuckets :
-# 		for i,bucket in enumerate(kbucket.buckets) :
-# 			g_original.append([bucket.g(f,i) for f in set(flow)])
+	# Write headers only once
+	with open(result_csv, "w", newline='') as f_result, open(time_csv, "w", newline='') as f_time:
+		result_writer = csv.writer(f_result)
+		time_writer = csv.writer(f_time)
 
-# # print("g_original",g_original)
-# g = np.array(g_original, dtype=int)
-# # print("g",g)
-# try :
-# 	rank =  np.linalg.matrix_rank(g)
-# 	# print("rank",rank)
-# 	# if rank < k :
-# 	# 	raise Exception("Rank less than k")
-# 	# inverse_g = inverse_matrix(g)
-# 	# b = [bucket.count for row in sketch.rows for kbucket in row.kbuckets for bucket in kbucket.buckets]
-# 	# b= np.array(b, dtype=int).reshape(-1, 1)
-# 	# print("b",b)
-# 	# c = (inverse_g @ b)
-# 	# print("c",c)
-# 	s = sketch.verify()
-# 	# print("s",s)
-# 	check_flow_result(flow, s)
-# except Exception as e:
-# 	print(e)
-# 	inverse_g = None
+
+	for element_range in element_ranges:
+		print(f"Running experiment for element_range={element_range}")
+		# Open files in append mode for each run
+		experiment_find_min_buckets(
+			rows_cnt, element_counts, element_range, trials,
+			result_csv=result_csv,
+			time_csv=time_csv
+		)
 
 

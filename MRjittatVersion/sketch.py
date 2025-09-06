@@ -1,7 +1,156 @@
-from .row import Rows
 from collections import deque, defaultdict
+import random
+from MrJittacore import  brute_force_k2_2d, inverse_matrix
 import numpy as np
 
+prime = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97, 101,103,107,109,113,127,131,137,139,149,151,157,163,167,173,179,181,191,193,197,199]
+
+class Bucket() :
+	def __init__(self,p,rc,k):
+		self.count = 0
+		self.id = 0
+		self.p = p
+		self.rc = rc
+		self._a = random.randint(1, p - 1)
+		self._b = random.randint(0, p - 1)
+		self.k = k
+		# print("Bucket init _a",self._a,"_b",self._b)
+		pass
+	
+	def g(self, f, i) :
+		arr = [[prime[i + j * self.rc] for i in range(self.rc)] for j in range(self.k)]
+		# print("g array",arr)
+		# arr = [419,569,241,151,29,13]
+		return arr[i][(self._a * f + self._b) % self.p % (self.rc)]
+
+
+	def insert(self, flow_id, i):
+		# print(f"g({flow_id}) = ",self.g(flow_id,i))
+		self.count += self.g(flow_id,i)
+		self.id += self.g(flow_id,i) * flow_id 
+		return self.g(flow_id,i)
+
+	def delete(self, flow_id, cnt,i):
+		if self.count < cnt * self.g(flow_id,i) :
+			self.count = 0
+		self.count -= cnt * self.g(flow_id,i)
+		self.id = (self.id - self.g(flow_id,i) * flow_id * cnt) % self.p 
+	
+				
+
+	# def is_pure(self, j , hash, f = None) :
+	# 	if self.count <= 0 :
+	# 		return False
+	# 	f_prime = self.id * power(self.count,self.p -2,self.p)
+	# 	if hash(f_prime) != j :
+	# 		return False
+	# 	return True
+
+	def get_sumid_and_count(self) :
+		sum_id = self.id * power(self.count, self.p - 2, self.p)
+		return sum_id, self.count
+
+def power(a,b,p) :
+	return pow(a, b, p)
+
+class Kbucket() :
+	def __init__(self,k,p,rc):
+		self.buckets = [Bucket(p,rc,k) for _ in range(k)]
+		self.k = k
+		pass
+
+	def insert(self, f):
+		g = []
+		for i,bucket in enumerate(self.buckets):
+			g.append(bucket.insert(f,i))
+		return g
+	
+	def delete(self, f, cnt) :
+		for i,bucket in enumerate(self.buckets):
+			bucket.delete(f,cnt,i)
+
+	def get_count(self) :
+		return [bucket.count for bucket in self.buckets]
+	
+
+class Rows() :
+	def __init__(self,m,p,k,rc):
+		self.kbuckets = [Kbucket(k,p,rc) for _ in range(m)]
+		self.p = p
+		self.m = m
+		self._a = random.randint(1, p - 1)
+		self._b = random.randint(0, p - 1)
+		self.k = k
+		self.rc = rc
+		pass
+
+	def hash(self, f):
+		return ((self._a * f + self._b) % self.p) % self.m
+
+	def insert(self, f):
+		h = self.hash(f)
+		# print(f,h)
+		return self.kbuckets[h].insert(f)
+		# return h
+
+	def pure_verification(self, i) :
+
+		answer = []
+		# print(a)
+		count = 0
+		for kk in range(self.k, 0, -1) :
+			a = np.array([bucket.count for bucket in self.kbuckets[i].buckets][:kk], dtype=int).reshape(-1, 1)
+			id = np.array([bucket.id for bucket in self.kbuckets[i].buckets][:kk], dtype=int).reshape(-1, 1)
+			for g in brute_force_k2_2d(kk,self.rc) :
+				g = np.array(g, dtype=int)
+				# print("g",g)
+				rank =  np.linalg.matrix_rank(g)
+				# print("rank",rank)
+				if rank < kk :
+					continue
+				try :
+					inv = inverse_matrix(g)
+					c = (inv @ a)
+					if not np.allclose(c, np.round(c), atol=1e-10):
+						continue
+					if np.any(c < 0) :
+						continue
+					c = np.round(c).astype(int)
+					c_diag = np.diagflat(c)
+					gc = (g @ c_diag) 
+					gc_inv = inverse_matrix(gc)
+					f = (gc_inv @ id)
+					#close round
+					if not np.allclose(f, np.round(f), atol=1e-10):
+						continue
+					f = np.round(f).astype(int)
+					flag = True
+					for idx in range(len(f)) :
+						if self.hash(int(f[idx][0])) != i :
+							flag = False
+							break
+					for j in range(len(g)) :
+						for k in range(len(f)):
+							# print(f"g[{j}][{k}] = {g[j][k]}, bucket.g({int(f[k][0])}) = {self.kbuckets[i].buckets[j].g(int(f[k][0]))}")
+							if self.kbuckets[i].buckets[j].g(int(f[k][0]),j) != g[j][k] :
+								flag = False
+								break
+					if flag :
+						# print(f"found pure: {f.flatten()}, count: {c.flatten()}")
+						return [(int(f[j][0]),int(c[j][0])) for j in range(len(f))]
+						answer.append( [(int(f[idx][0]), int(c[idx][0])) for idx in range(len(f))])
+				except np.linalg.LinAlgError : 
+					# print("not invertible")
+					pass
+		return []
+
+	
+	def delete(self, f, cnt) :
+		# print(f)
+		h = self.hash(f)
+		# print(h)
+		self.kbuckets[h].delete(f,cnt)
+	
 
 class Sketch :
 	def __init__(self, rows_cnt, buckets_cnt, p,k,rc) :
@@ -53,4 +202,3 @@ class Sketch :
 	def insert(self, f):
 		for row in self.rows:
 			row.insert(f)
-

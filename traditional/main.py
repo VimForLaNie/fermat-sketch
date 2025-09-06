@@ -100,11 +100,10 @@ def experiment_find_min_buckets(rows_cnt, flow_sizes, element_range, trials=5, p
 	For each flow size, find minimum buckets needed for 99.9% accuracy using binary search.
 	Output results to CSV files.
 	"""
-	with open(result_csv, "w", newline='') as f_result, open(time_csv, "w", newline='') as f_time:
+	# Open files in append mode, don't write headers
+	with open(result_csv, "a", newline='') as f_result, open(time_csv, "a", newline='') as f_time:
 		result_writer = csv.writer(f_result)
 		time_writer = csv.writer(f_time)
-		result_writer.writerow(["flow_size", "min_buckets", "success_rate", "rows_cnt", "element_range", "trials"])
-		time_writer.writerow(["flow_size", "buckets", "trial_idx", "decode_time", "rows_cnt", "element_range", "trials"])
 		for flow_size in flow_sizes:
 			print(f"Finding min buckets for flow_size={flow_size} ...")
 			min_buckets, success_rate, decode_times = binary_search_min_buckets(
@@ -117,15 +116,24 @@ def experiment_find_min_buckets(rows_cnt, flow_sizes, element_range, trials=5, p
 
 if __name__ == "__main__":
 	# Example usage:
-	rows_cnt = 2
+	rows_cnt = 3
 	element_ranges = [20, 40, 60, 80, 100]  # Range of possible flow IDs for each insert
 	flow_size = 2000  # Number of inserts (unique flows per trial)
-	trials = 1000 # You can adjust this for more precision
+	trials = 5 # You can adjust this for more precision
+
+	# Write headers only once
+	result_csv = "min_buckets_results.csv"
+	time_csv = "decode_times.csv"
+	with open(result_csv, "w", newline='') as f_result, open(time_csv, "w", newline='') as f_time:
+		result_writer = csv.writer(f_result)
+		time_writer = csv.writer(f_time)
+		result_writer.writerow(["flow_size", "min_buckets", "success_rate", "rows_cnt", "element_range", "trials"])
+		time_writer.writerow(["flow_size", "buckets", "trial_idx", "decode_time", "rows_cnt", "element_range", "trials"])
 
 	for element_range in element_ranges:
 		print(f"Running experiment for element_range={element_range}, flow_size={flow_size}")
 		experiment_find_min_buckets(
 			rows_cnt, [flow_size], element_range, trials,
-			result_csv=f"min_buckets_results_range_{element_range}.csv",
-			time_csv=f"decode_times_range_{element_range}.csv"
+			result_csv=result_csv,
+			time_csv=time_csv
 		)
