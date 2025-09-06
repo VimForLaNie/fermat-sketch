@@ -71,7 +71,7 @@ def binary_search_min_buckets(rows_cnt, element_range, element_counts, trials, p
 		decode_times = []
 		for _ in range(trials):
 			sketch = Sketch(rows_cnt, mid, p)
-			elements = [i for i in range(1, element_counts + 1)]
+			elements = [random.randint(1, element_range) for _ in range(element_counts)]
 			original_counts = Counter(elements)
 			for elem in elements:
 				for row in range(rows_cnt):
@@ -117,9 +117,9 @@ def experiment_find_min_buckets(rows_cnt, flow_sizes, element_range, trials=5, p
 if __name__ == "__main__":
 	# Example usage:
 	rows_cnt = 3
-	element_ranges = [20, 40, 60, 80, 100]  # Range of possible flow IDs for each insert
-	flow_size = 2000  # Number of inserts (unique flows per trial)
-	trials = 5 # You can adjust this for more precision
+	element_ranges = [50, 100, 150, 200, 250, 300]  # Range of possible flow IDs for each insert
+	flow_size = 6000  # Number of inserts (unique flows per trial)
+	trials = 1000 # You can adjust this for more precision
 
 	# Write headers only once
 	result_csv = "min_buckets_results.csv"

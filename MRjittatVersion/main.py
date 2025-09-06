@@ -138,7 +138,7 @@ def binary_search_min_buckets(rows_cnt, element_range, element_counts, trials, p
 			low = mid + 1
 	return min_buckets, best_success_rate, best_decode_times
 
-def experiment_find_min_buckets(rows_cnt, element_counts, element_range, trials=5, p=int(1e9 + 7), k=2, rc=3,
+def experiment_find_min_buckets(rows_cnt, element_counts, element_range, trials=5, p=int(1e9 + 7), k=2, rc=20,
 								result_csv="min_buckets_results.csv", time_csv="decode_times.csv"):
 	# Open files in append mode, don't write headers
 	with open(result_csv, "a", newline='') as f_result, open(time_csv, "a", newline='') as f_time:
@@ -162,9 +162,9 @@ def experiment_find_min_buckets(rows_cnt, element_counts, element_range, trials=
 
 if __name__ == "__main__":
 	rows_cnt = 3
-	element_ranges = [20, 40, 60, 80, 100] 
-	element_counts = 2000
-	trials = 5
+	element_ranges = [50, 100, 150, 200, 250, 300]  # Range of possible flow IDs for each insert
+	element_counts = 6000
+	trials = 1000
 
 	# Use single result and time file for all ranges
 	result_csv = "min_buckets_results.csv"
@@ -184,5 +184,3 @@ if __name__ == "__main__":
 			result_csv=result_csv,
 			time_csv=time_csv
 		)
-
-
