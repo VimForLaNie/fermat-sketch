@@ -5,54 +5,126 @@ import matplotlib.pyplot as plt
 import numpy as np
 from collections import Counter
 
+def calculate_flow_accuracy(flow, recovered):
+    """Flow-level accuracy: fraction of distinct flows with exact count match."""
+    flow_counter = Counter(flow)
+    recovered_counter = Counter(recovered)
+    total = len(flow_counter)
+    if total == 0:
+        return 1.0
+    correct = sum(1 for f,c in flow_counter.items() if recovered_counter.get(f,0) == c)
+    return correct / total
 
-def calculate_accuracy(flow, s):
-    flow_counter = Counter(flow)  # ground truth
-    recovered_counter = Counter(s)
+def calculate_item_recall(flow, recovered):
+    """Item-level recall: fraction of true items that were recovered (1 - FN_items / total_items)."""
+    flow_counter = Counter(flow)         # ground truth counts
+    total_items = sum(flow_counter.values())
+    if total_items == 0:
+        return 1.0
+    missed = 0
+    for f, true_cnt in flow_counter.items():
+        rec_cnt = recovered.get(f, 0)
+        if rec_cnt < true_cnt:
+            missed += (true_cnt - rec_cnt)
+    # recall = (total_items - missed) / total_items
+    # print(f"Total items: {total_items}, Missed items: {missed}, Recall: {(total_items - missed) / total_items:.4f}")
+    return (total_items - missed) / total_items
 
-    correct = {f: flow_counter[f] for f in flow_counter if f in recovered_counter and flow_counter[f] == recovered_counter[f]}
-    total_flows = len(flow_counter)
+def mean_metric_for_config(buckets, flow_size, trials, rows, k, rc, p, flow_range, sketch_type, metric, rng, verbose=True):
+    """Run `trials` experiments for a specific bucket count and return mean metric."""
+    vals = []
+    for t in range(trials):
+        flow = random.choices(range(1, flow_range + 1), k=flow_size)
+        if sketch_type == "Traditional":
+            sketch = Sketch_Traditional(rows, buckets, p=int(p))
+        else:
+            sketch = Sketch_Mrjittat(rows, buckets, p=int(p), k=k, rc=rc)
 
-    accuracy = len(correct) / total_flows if total_flows > 0 else 0
-    return accuracy
+        for f in flow:
+            sketch.insert(f)
+        recovered = sketch.verify()  # expected dict: {flow_id: count, ...}
 
+        if metric == 'flow':
+            vals.append(calculate_flow_accuracy(flow, recovered))
+        else:  # 'item'
+            vals.append(calculate_item_recall(flow, recovered))
 
-def find_min_buckets(flow_size, target_acc=0.99, trials=5, rows=1, k=2, sketch_type="MrJittat"):
+        # ---- Progress bar ----
+        # if verbose:
+            # percent = int((t + 1) * 100 / trials)
+            # print(f"\r[buckets={buckets}] Progress: {percent}% ", end="", flush=True)
+
+    # if verbose:
+        # print("")  # newline after finishing
+    return float(np.mean(vals))
+
+def find_min_buckets(flow_size,
+                     target_acc=0.99,
+                     trials=5,
+                     rows=1,
+                     k=2,
+                     sketch_type="MrJittat",
+                     metric='item',           # 'item' or 'flow'
+                     p=int(1e9+7),
+                     rc=4,
+                     flow_range=5000,
+                     min_buckets=8,
+                     max_buckets=20000,
+                     seed=None,
+                     verbose=False):
     """
-    Gradually increase bucket count until target accuracy is reached.
-    Returns minimum bucket count required.
+    Find minimum bucket count (between min_buckets and max_buckets) so that
+    the mean metric >= target_acc. Metric: 'item' (item-level recall) or 'flow' (flow-level exact match).
+    Uses exponential search to find an upper bound then binary search to find minimum.
+    Returns bucket count (int) or None if not found within max_buckets.
     """
-    buckets = 10  # start small
-    max_buckets = 20000
+    if metric not in ('item', 'flow'):
+        raise ValueError("metric must be 'item' or 'flow'")
 
-    while buckets <= max_buckets:
-        accuracies = []
-        for _ in range(trials):
-            flow = random.choices(range(1, 5000), k=flow_size)
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed)
 
-            if sketch_type == "Traditional":
-                sketch = Sketch_Traditional(rows, buckets, p=int(1e9 + 7))
-            else:
-                sketch = Sketch_Mrjittat(rows, buckets, p=int(1e9 + 7), k=k, rc=12)
+    # quick check at min_buckets
+    low = max(1, int(min_buckets))
+    high = low
+    mean_at_low = mean_metric_for_config(low, flow_size, trials, rows, k, rc, p, flow_range, sketch_type, metric, random)
+    if verbose:
+        print(f"[check] buckets={low}, mean_{metric}={mean_at_low:.6f}")
+    if mean_at_low >= target_acc:
+        return low
 
-            for f in flow:
-                sketch.insert(f)
-            recovered = sketch.verify()
+    # exponential search to find high such that mean >= target_acc or until max_buckets
+    while high <= max_buckets:
+        high = min(high * 2, max_buckets)
+        mean_high = mean_metric_for_config(high, flow_size, trials, rows, k, rc, p, flow_range, sketch_type, metric, random)
+        if verbose:
+            print(f"[exp] buckets={high}, mean_{metric}={mean_high:.6f}")
+        if mean_high >= target_acc:
+            break
+        if high == max_buckets:
+            # not found
+            if verbose:
+                print(f"Not found up to max_buckets={max_buckets}")
+            return None
 
-            acc = calculate_accuracy(flow, recovered)
-            # if sketch_type == "MrJittat":
-            #     print(f"Buckets: {buckets},  Accuracy: {acc:.4f}")
-            accuracies.append(acc)
+    # now binary search between low and high (we know low < target, high >= target)
+    left, right = low, high
+    while left < right:
+        mid = left + (right - left) // 2
+        mean_mid = mean_metric_for_config(mid, flow_size, trials, rows, k, rc, p, flow_range, sketch_type, metric, random)
+        if verbose:
+            print(f"[bin] mid={mid}, mean_{metric}={mean_mid:.6f}")
+        if mean_mid >= target_acc:
+            right = mid
+        else:
+            left = mid + 1
 
-        mean_acc = np.mean(accuracies)
-        print(f"Buckets: {buckets},  Accuracy: {mean_acc:.4f}")
-        
-        if mean_acc >= target_acc:
-            return buckets  # found minimum bucket count
+    # final check
+    final_mean = mean_metric_for_config(left, flow_size, trials, rows, k, rc, p, flow_range, sketch_type, metric, random)
+    print(f"[final] buckets={left}, mean_{metric}={final_mean:.6f}")
+    return left
 
-        buckets *= 2  # exponential search
-
-    return None  # not found within range
 
 
 def run_experiment(flow_sizes, trials=5, sketch_type="MrJittat"):
@@ -79,9 +151,9 @@ def plot_required_buckets(flow_sizes, buckets_trad, buckets_jt):
 
 
 # Parameters
-flow_sizes = [10, 20, 40, 80, 160]
+flow_sizes = [ 40, 80, 120, 200]
 buckets_trad = run_experiment(flow_sizes, trials=100, sketch_type="Traditional")
-buckets_jt = run_experiment(flow_sizes, trials=100, sketch_type="MrJittat")
+# buckets_jt = run_experiment(flow_sizes, trials=100, sketch_type="MrJittat")
 
 # Plot results
-plot_required_buckets(flow_sizes, buckets_trad, buckets_jt)
+# plot_required_buckets(flow_sizes, buckets_trad, buckets_jt)
