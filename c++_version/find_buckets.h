@@ -8,6 +8,11 @@
 #include <iostream>
 #include <numeric>
 #include <functional>
+#include <chrono>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+#include <cmath>
 #include "./sketch.h"
 
 // Compute item-level recall for one run (same logic you used earlier)
@@ -93,6 +98,48 @@ static double mean_recall_for_config(int rows_cnt,
 	return sum_recall / static_cast<double>(trials);
 }
 
+// Measure per-trial wallclock times for a given config (returns vector of seconds, length == trials)
+static std::vector<double> measure_trial_times(int rows_cnt,
+											   int buckets_cnt,
+											   long long p,
+											   int k,
+											   int rc,
+											   int inserts_per_trial,
+											   int trials,
+											   int flow_id_min,
+											   int flow_id_max,
+											   std::mt19937 &rng)
+{
+	std::uniform_int_distribution<int> dist_flow(flow_id_min, flow_id_max);
+	std::vector<double> times;
+	times.reserve(trials);
+
+	for (int t = 0; t < trials; ++t)
+	{
+		Sketch sketch(rows_cnt, buckets_cnt, p, k, rc);
+		std::vector<int> events;
+		events.reserve(inserts_per_trial);
+
+		auto t0 = std::chrono::high_resolution_clock::now();
+
+		for (int i = 0; i < inserts_per_trial; ++i)
+		{
+			int f = dist_flow(rng);
+			events.push_back(f);
+			sketch.insert(f);
+		}
+
+		// run decode/verify
+		auto recovered = sketch.verify();
+
+		auto t1 = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> elapsed = t1 - t0;
+		times.push_back(elapsed.count());
+	}
+
+	return times;
+}
+
 /*
  find_min_buckets_for_insert_counts
   - insert_counts: vector of total insert events (x-axis)
@@ -102,6 +149,7 @@ static double mean_recall_for_config(int rows_cnt,
   - flow_id_range: [flow_id_min, flow_id_max] used to generate flows
   - min_buckets, max_buckets: search limits
   returns vector<int> required_buckets (same length as insert_counts). -1 means not found up to max_buckets.
+  Additionally writes a CSV file "timings.csv" containing per-trial runtimes (seconds).
 */
 static std::vector<int> find_min_buckets_for_insert_counts(
 	const std::vector<int> &insert_counts,
@@ -122,8 +170,15 @@ static std::vector<int> find_min_buckets_for_insert_counts(
 	std::vector<int> result;
 	result.reserve(insert_counts.size());
 
-	for (int inserts : insert_counts)
+	// prepare times matrix: rows = trials, cols = insert_counts.size()
+	// initialize with NaN for missing entries
+	size_t C = insert_counts.size();
+	std::vector<std::vector<double>> times_matrix(static_cast<size_t>(trials), std::vector<double>(C, std::numeric_limits<double>::quiet_NaN()));
+
+	for (size_t ci = 0; ci < insert_counts.size(); ++ci)
 	{
+		int inserts = insert_counts[ci];
+
 		// exponential search for an upper bound
 		int low = min_buckets;
 		int high = low;
@@ -145,7 +200,6 @@ static std::vector<int> find_min_buckets_for_insert_counts(
 				{
 					high = max_buckets;
 				}
-				// cout << "Inserts " << inserts << ": testing buckets=" << high << "\n";
 				mean_rec = mean_recall_for_config(rows_cnt, high, p, k, rc, inserts, trials, flow_id_min, flow_id_max, rng);
 				if (mean_rec >= target_recall)
 				{
@@ -171,7 +225,6 @@ static std::vector<int> find_min_buckets_for_insert_counts(
 		while (left < right)
 		{
 			int mid = left + (right - left) / 2;
-			// cout << "Inserts " << inserts << ": testing buckets=" << mid << " (range " << left << "-" << right << ")\n";
 			double recall_mid = mean_recall_for_config(rows_cnt, mid, p, k, rc, inserts, trials, flow_id_min, flow_id_max, rng);
 			if (recall_mid >= target_recall)
 			{
@@ -182,8 +235,55 @@ static std::vector<int> find_min_buckets_for_insert_counts(
 				left = mid + 1;
 			}
 		}
+
+		// left is the minimal bucket count found by search
 		result.push_back(left);
 		std::cout << "Inserts " << inserts << ": required buckets = " << left << " (target recall=" << target_recall << ")\n";
+
+		// measure per-trial times for this bucket count and store into times_matrix column
+		std::vector<double> measured = measure_trial_times(rows_cnt, left, p, k, rc, inserts, trials, flow_id_min, flow_id_max, rng);
+
+		// fill into column ci
+		for (int t = 0; t < trials; ++t)
+		{
+			times_matrix[static_cast<size_t>(t)][ci] = measured[static_cast<size_t>(t)];
+		}
+	}
+
+	// Write CSV file "timings.csv" with header showing insert counts
+	std::ofstream out("timings.csv");
+	if (!out)
+	{
+		std::cerr << "Failed to open timings.csv for writing\n";
+	}
+	else
+	{
+		// header
+		for (size_t ci = 0; ci < insert_counts.size(); ++ci)
+		{
+			out << "inserts_" << insert_counts[ci];
+			if (ci + 1 < insert_counts.size())
+				out << ',';
+		}
+		out << '\n';
+
+		// rows: each trial
+		for (int t = 0; t < trials; ++t)
+		{
+			for (size_t ci = 0; ci < insert_counts.size(); ++ci)
+			{
+				double v = times_matrix[static_cast<size_t>(t)][ci];
+				if (std::isnan(v))
+					out << ""; // leave empty for not-found
+				else
+					out << std::fixed << std::setprecision(6) << v;
+				if (ci + 1 < insert_counts.size())
+					out << ',';
+			}
+			out << '\n';
+		}
+		out.close();
+		std::cout << "Wrote timings.csv\n";
 	}
 
 	return result;
