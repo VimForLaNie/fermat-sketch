@@ -21,6 +21,3 @@ class Rows() :
 	def delete(self, f, cnt) :
 		h = self.hash(f)
 		self.buckets[h].delete(f,cnt)
-			
-				
-

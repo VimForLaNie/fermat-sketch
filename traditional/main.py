@@ -1,12 +1,15 @@
-from .sketch import Sketch
+from sketch import Sketch
 from collections import Counter
 import random
-import matplotlib.pyplot as plt
+import time
+import csv
 
 debug = True
-def check_flow_result(flow, s, verbose=True):
+
+def check_flow_result(flow, s, strict=True, verbose=True):
 	"""
 	Compare flow list with the recovered flowset dictionary and print summary.
+	If strict=True, returns True only if recovered matches ground truth exactly.
 	"""
 	flow_counter = Counter(flow)  # ground truth
 	recovered_counter = Counter(s)
@@ -41,100 +44,88 @@ def check_flow_result(flow, s, verbose=True):
 				print(f"   Flow {f}: got {c}")
 		print("=========================")
 
-	return {
-		"correct": correct,
-		"missing": missing,
-		"extra": extra,
-		"mismatched": mismatched
-	}
+	if strict:
+		# Must match exactly
+		return len(missing) == 0 and len(extra) == 0 and len(mismatched) == 0 and len(correct) == len(flow_counter)
+	else:
+		return {
+			"correct": correct,
+			"missing": missing,
+			"extra": extra,
+			"mismatched": mismatched
+		}
 
-
-def experiment_buckets(rows_cnt, buckets_list, element_range, element_counts, trials=5, p=int(1e9 + 7)):
-	mean_fp_list = []
-	mean_fn_list = []
-	mean_acc_list = []
-	print(f"Experimenting with rows: {rows_cnt}, element range: {element_range}, element counts: {element_counts}, trials per bucket count: {trials}")
-
-	for buckets_cnt in buckets_list:
-		fp_trials = []
-		fn_trials = []
-		print(f"Running experiments for {buckets_cnt} buckets...")
-
+def binary_search_min_buckets(rows_cnt, element_range, element_counts, trials, p=int(1e9 + 7), verbose=False):
+	"""
+	Binary search for minimum buckets needed to achieve 99% accuracy (all trials decode exactly).
+	Returns min_buckets, success_rate, and decode_times.
+	"""
+	low = 1
+	high = element_counts * 10  # Reasonable upper bound
+	min_buckets = None
+	best_success_rate = 0
+	best_decode_times = []
+	while low <= high:
+		mid = (low + high) // 2
+		success_count = 0
+		decode_times = []
 		for _ in range(trials):
-			sketch = Sketch(rows_cnt, buckets_cnt, p)
-
-			# Generate random elements
-			# elements = random.sample(range(1, element_range), k=element_counts)
-			elements = [i for i in range(1,element_counts + 1)]
+			sketch = Sketch(rows_cnt, mid, p)
+			elements = [i for i in range(1, element_counts + 1)]
 			original_counts = Counter(elements)
-
-			# Insert elements into sketch
 			for elem in elements:
 				for row in range(rows_cnt):
 					sketch.rows[row].insert(elem)
-
-			# Recover flow counts
+			start = time.time()
 			recovered = sketch.verify()
+			end = time.time()
+			decode_times.append(end - start)
+			if check_flow_result(elements, recovered, strict=True, verbose=False):
+				success_count += 1
+		success_rate = success_count / trials
+		if verbose:
+			print(f"Buckets: {mid}, Success rate: {success_rate:.4f}")
+		if success_rate >= 0.99:
+			min_buckets = mid
+			best_success_rate = success_rate
+			best_decode_times = decode_times.copy()
+			high = mid - 1
+		else:
+			low = mid + 1
+	return min_buckets, best_success_rate, best_decode_times
 
-			# Calculate false positives and false negatives
-			fp = sum(1 for f in recovered if f not in original_counts)
-			fn = sum(1 for f in original_counts if f not in recovered)
-
-			# fp_trials.append(fp / len(original_counts))  # normalized
-			fp_trials.append(fp )
-			fn_trials.append(fn )
-			# fn_trials.append(fn / len(original_counts))  # normalized
-
-		# Compute mean for this bucket count
-		print("success_rate : ", (element_counts - (sum(fn_trials) + sum(fp_trials))/ trials) / element_counts * 100)
-		mean_fp_list.append(sum(fp_trials) / trials)
-		mean_fn_list.append(sum(fn_trials) / trials)
-		acc = (element_counts - (sum(fn_trials) + sum(fp_trials))/ trials) / element_counts * 100
-		mean_acc_list.append(acc)
-
-		if debug:
-			print(f"Buckets: {buckets_cnt}, Mean FP: {mean_fp_list[-1]:.4f}, Mean FN: {mean_fn_list[-1]:.4f}")
-
-	return mean_fp_list, mean_fn_list, mean_acc_list
-
-
-def plot_results_buckets(buckets_list, fp_list, fn_list,acc):
-	plt.figure(figsize=(10, 6))
-	plt.plot(buckets_list,acc , marker='o', label="Accuracy Rate")
-	# plt.plot(buckets_list, fn_list, marker='x', label="Mean False Negative Rate")
-	plt.xlabel("Number of Buckets")
-	plt.ylabel("Rate")
-	plt.title("Accuracy vs. Number of Buckets")
-	plt.legend()
-	plt.grid(True)
-	plt.show()
-
-
+def experiment_find_min_buckets(rows_cnt, flow_sizes, element_range, trials=5, p=int(1e9 + 7), 
+								result_csv="min_buckets_results.csv", time_csv="decode_times.csv"):
+	"""
+	For each flow size, find minimum buckets needed for 99.9% accuracy using binary search.
+	Output results to CSV files.
+	"""
+	with open(result_csv, "w", newline='') as f_result, open(time_csv, "w", newline='') as f_time:
+		result_writer = csv.writer(f_result)
+		time_writer = csv.writer(f_time)
+		result_writer.writerow(["flow_size", "min_buckets", "success_rate", "rows_cnt", "element_range", "trials"])
+		time_writer.writerow(["flow_size", "buckets", "trial_idx", "decode_time", "rows_cnt", "element_range", "trials"])
+		for flow_size in flow_sizes:
+			print(f"Finding min buckets for flow_size={flow_size} ...")
+			min_buckets, success_rate, decode_times = binary_search_min_buckets(
+				rows_cnt, element_range, flow_size, trials, p, verbose=debug
+			)
+			result_writer.writerow([flow_size, min_buckets, success_rate, rows_cnt, element_range, trials])
+			for idx, t in enumerate(decode_times):
+				time_writer.writerow([flow_size, min_buckets, idx, t, rows_cnt, element_range, trials])
+			print(f"flow_size={flow_size}, min_buckets={min_buckets}, success_rate={success_rate:.4f}")
 
 if __name__ == "__main__":
-	# rows_list = [100, 500, 1000, 1500, 2000, 2500, 3000]  # varying rows
-	# # rows_list = [100,500,1000,1500,2000]
-	# rows_list = [3]
-	# buckets_cnt = 10000
-	# # bucket_list = [ 500, 1000, 1500, 2000, 2500, 3000,4000 , 5000]  # varying buckets
-	bucket_list = [100 * i for i in range(1, 24)]
-	element_range = 10000
-	# element_range_list = [20000 * i for i in range(1, 10)]  # varying element range
-	element_counts = 100
-	trials = 1000 # number of experiments per row count
+	# Example usage:
+	rows_cnt = 2
+	element_ranges = [20, 40, 60, 80, 100]  # Range of possible flow IDs for each insert
+	flow_size = 2000  # Number of inserts (unique flows per trial)
+	trials = 1000 # You can adjust this for more precision
 
-	fp_list, fn_list ,acc = experiment_buckets(2, bucket_list, element_range, element_counts, trials)
-	# fp_list, fn_list = experiment_element_range(3, 40000, element_range_list, element_counts, trials)
-	plot_results_buckets(bucket_list, fp_list, fn_list,acc)
-	# plot_results_element_range(element_range_list, fp_list, fn_list)
-	# rows = 2
-	# buckets = 100
-	# flow = random.choices(range(1, 100), k=100)
-	# sketch = Sketch(rows,buckets,p= int(1e9 + 7))
-	# print("flow",flow)
-	# for f in flow :
-	# 	sketch.insert(f)
-	# s = sketch.verify()
-	# check_flow_result(flow, s)
-	# print("s",s)
-
+	for element_range in element_ranges:
+		print(f"Running experiment for element_range={element_range}, flow_size={flow_size}")
+		experiment_find_min_buckets(
+			rows_cnt, [flow_size], element_range, trials,
+			result_csv=f"min_buckets_results_range_{element_range}.csv",
+			time_csv=f"decode_times_range_{element_range}.csv"
+		)

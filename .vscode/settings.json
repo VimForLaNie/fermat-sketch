@@ -54,5 +54,6 @@
     "unordered_map": "cpp",
     "variant": "cpp",
     "algorithm": "cpp"
-  }
+  },
+  "C_Cpp_Runner.msvcBatchPath": ""
 }
