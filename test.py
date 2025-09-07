@@ -4,16 +4,29 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import Counter
+import csv
+import time
 
 def calculate_flow_accuracy(flow, recovered):
     """Flow-level accuracy: fraction of distinct flows with exact count match."""
     flow_counter = Counter(flow)
-    recovered_counter = Counter(recovered)
+    # recovered may be a dict {id: count} or a list; Counter handles both:
+    recovered_counter = Counter(recovered)  # if mapping, Counter(mapping) uses mapping values
     total = len(flow_counter)
     if total == 0:
         return 1.0
-    correct = sum(1 for f,c in flow_counter.items() if recovered_counter.get(f,0) == c)
+    correct = sum(1 for f, c in flow_counter.items() if recovered_counter.get(f, 0) == c)
     return correct / total
+
+def calculate_flow_exact(flow, recovered):
+    """
+    Trial-level exact-flow accuracy:
+    Returns 1.0 only if the recovered map equals the ground-truth exactly
+    (same keys and same counts). Else returns 0.0.
+    """
+    flow_counter = Counter(flow)
+    recovered_counter = Counter(recovered)
+    return 1.0 if flow_counter == recovered_counter else 0.0
 
 def calculate_item_recall(flow, recovered):
     """Item-level recall: fraction of true items that were recovered (1 - FN_items / total_items)."""
@@ -22,16 +35,17 @@ def calculate_item_recall(flow, recovered):
     if total_items == 0:
         return 1.0
     missed = 0
+    # recovered may be mapping or iterable; Counter(recovered) will handle mapping properly
+    recovered_counter = Counter(recovered)
     for f, true_cnt in flow_counter.items():
-        rec_cnt = recovered.get(f, 0)
+        rec_cnt = recovered_counter.get(f, 0)
         if rec_cnt < true_cnt:
             missed += (true_cnt - rec_cnt)
-    # recall = (total_items - missed) / total_items
-    # print(f"Total items: {total_items}, Missed items: {missed}, Recall: {(total_items - missed) / total_items:.4f}")
     return (total_items - missed) / total_items
 
 def mean_metric_for_config(buckets, flow_size, trials, rows, k, rc, p, flow_range, sketch_type, metric, rng, verbose=True):
-    """Run `trials` experiments for a specific bucket count and return mean metric."""
+    """Run `trials` experiments for a specific bucket count and return mean metric.
+    metric: 'item', 'flow' (per-flow fraction), or 'flow_exact' (trial-level exact 0/1)"""
     vals = []
     for t in range(trials):
         flow = random.choices(range(1, flow_range + 1), k=flow_size)
@@ -46,16 +60,16 @@ def mean_metric_for_config(buckets, flow_size, trials, rows, k, rc, p, flow_rang
 
         if metric == 'flow':
             vals.append(calculate_flow_accuracy(flow, recovered))
+        elif metric == 'flow_exact':
+            vals.append(calculate_flow_exact(flow, recovered))
         else:  # 'item'
             vals.append(calculate_item_recall(flow, recovered))
 
-        # ---- Progress bar ----
+        # optional progress printing (disabled by default)
         # if verbose:
-            # percent = int((t + 1) * 100 / trials)
-            # print(f"\r[buckets={buckets}] Progress: {percent}% ", end="", flush=True)
+        #     percent = int((t + 1) * 100 / trials)
+        #     print(f"\r[buckets={buckets}] Progress: {percent}% ", end="", flush=True)
 
-    # if verbose:
-        # print("")  # newline after finishing
     return float(np.mean(vals))
 
 def find_min_buckets(flow_size,
@@ -64,7 +78,7 @@ def find_min_buckets(flow_size,
                      rows=3,
                      k=2,
                      sketch_type="MrJittat",
-                     metric='item',           # 'item' or 'flow'
+                     metric='item',           # 'item' or 'flow' or 'flow_exact'
                      p=int(1e9+7),
                      rc=4,
                      flow_range=5000,
@@ -74,12 +88,13 @@ def find_min_buckets(flow_size,
                      verbose=False):
     """
     Find minimum bucket count (between min_buckets and max_buckets) so that
-    the mean metric >= target_acc. Metric: 'item' (item-level recall) or 'flow' (flow-level exact match).
+    the mean metric >= target_acc. Metric: 'item' (item-level recall),
+    'flow' (per-flow fraction), or 'flow_exact' (trial-level exact match).
     Uses exponential search to find an upper bound then binary search to find minimum.
     Returns bucket count (int) or None if not found within max_buckets.
     """
-    if metric not in ('item', 'flow'):
-        raise ValueError("metric must be 'item' or 'flow'")
+    if metric not in ('item', 'flow', 'flow_exact'):
+        raise ValueError("metric must be 'item', 'flow', or 'flow_exact'")
 
     if seed is not None:
         random.seed(seed)
@@ -125,16 +140,13 @@ def find_min_buckets(flow_size,
     print(f"[final] buckets={left}, mean_{metric}={final_mean:.6f}")
     return left
 
-
-
-def run_experiment(flow_sizes, trials=5, sketch_type="MrJittat"):
+def run_experiment(flow_sizes, trials=5, sketch_type="MrJittat", metric='item'):
     required_buckets = []
     for flow_size in flow_sizes:
-        min_buckets = find_min_buckets(flow_size, target_acc=0.99, trials=trials, sketch_type=sketch_type)
+        min_buckets = find_min_buckets(flow_size, target_acc=0.99, trials=trials, sketch_type=sketch_type, metric=metric)
         required_buckets.append(min_buckets)
-        print(f"Flow size {flow_size}: needs {min_buckets} buckets for {sketch_type}")
+        print(f"Flow size {flow_size}: needs {min_buckets} buckets for {sketch_type} using metric={metric}")
     return required_buckets
-
 
 def plot_required_buckets(flow_sizes, buckets_trad, buckets_jt):
     plt.figure(figsize=(8, 5))
@@ -149,11 +161,145 @@ def plot_required_buckets(flow_sizes, buckets_trad, buckets_jt):
     plt.tight_layout()
     plt.show()
 
+def mean_and_std_for_config(buckets, flow_size, trials, rows, k, rc, p, flow_range, sketch_type, metric='item', seed=None, verbose=False):
+    """
+    Run `trials` experiments for a given bucket count and return (mean, std).
+    metric: 'item', 'flow', or 'flow_exact'
+    """
+    if metric not in ('item', 'flow', 'flow_exact'):
+        raise ValueError("metric must be 'item', 'flow' or 'flow_exact'")
 
-# Parameters
-flow_sizes = [ 40, 80, 120, 200]
-buckets_trad = run_experiment(flow_sizes, trials=500, sketch_type="Traditional")
-# buckets_jt = run_experiment(flow_sizes, trials=100, sketch_type="MrJittat")
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed)
 
-# Plot results
-# plot_required_buckets(flow_sizes, buckets_trad, buckets_jt)
+    vals = []
+    start = time.time()
+    for t in range(trials):
+        flow = random.choices(range(1, flow_range + 1), k=flow_size)
+        if sketch_type == "Traditional":
+            sketch = Sketch_Traditional(rows, buckets, p=int(p))
+        else:
+            sketch = Sketch_Mrjittat(rows, buckets, p=int(p), k=k, rc=rc)
+
+        for f in flow:
+            sketch.insert(f)
+        recovered = sketch.verify()
+
+        if metric == 'flow':
+            vals.append(calculate_flow_accuracy(flow, recovered))
+        elif metric == 'flow_exact':
+            vals.append(calculate_flow_exact(flow, recovered))
+        else:
+            vals.append(calculate_item_recall(flow, recovered))
+
+        if verbose:
+            pct = (t + 1) * 100 // trials
+            elapsed = time.time() - start
+            # estimate remaining time
+            avg = elapsed / (t + 1)
+            remaining = avg * (trials - t - 1)
+            print(f"\r  progress: {pct:3d}%  elapsed={elapsed:.1f}s  eta={remaining:.1f}s", end="", flush=True)
+
+    if verbose:
+        print("")  # newline after progress line
+
+    mean_val = float(np.mean(vals)) if vals else 0.0
+    std_val = float(np.std(vals, ddof=0)) if vals else 0.0
+    return mean_val, std_val
+
+def run_mean_recalls_for_buckets(bucket_counts,
+                                 flow_size,
+                                 trials=50,
+                                 rows=1,
+                                 k=2,
+                                 rc=4,
+                                 p=int(1e9+7),
+                                 flow_range=5000,
+                                 sketch_type="MrJittat",
+                                 metric='item',
+                                 seed=None,
+                                 verbose=False,
+                                 out_csv=None):
+    """
+    For each bucket count in bucket_counts, run trials and compute mean & std of metric.
+    Returns list of tuples: [(bucket, mean, std), ...]
+    metric: 'item', 'flow', 'flow_exact'
+    If out_csv is provided (string), write CSV with columns: Bucket,Mean,Std
+    """
+    if metric not in ('item', 'flow', 'flow_exact'):
+        raise ValueError("metric must be 'item', 'flow' or 'flow_exact'")
+
+    results = []
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed)
+
+    total = len(bucket_counts)
+    for idx, buckets in enumerate(bucket_counts):
+        if verbose:
+            print(f"[{idx+1}/{total}] Testing buckets={buckets} ...")
+        mean_val, std_val = mean_and_std_for_config(buckets, flow_size, trials,
+                                                    rows, k, rc, p, flow_range,
+                                                    sketch_type, metric, seed, verbose)
+        results.append((buckets, mean_val, std_val))
+        if verbose:
+            print(f"    -> mean={mean_val:.6f}, std={std_val:.6f}")
+
+    # optional CSV output
+    if out_csv:
+        with open(out_csv, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Bucket', f'Mean_{metric}', f'Std_{metric}'])
+            for b, m, s in results:
+                writer.writerow([b, f"{m:.6f}", f"{s:.6f}"])
+        if verbose:
+            print(f"Wrote results to {out_csv}")
+
+    return results
+
+def plot_mean_recalls(results, xlabel='Bucket count', ylabel='Mean item recall', title=None):
+    """
+    Plot results produced by run_mean_recalls_for_buckets.
+    results: list of (bucket, mean, std)
+    """
+    buckets = [r[0] for r in results]
+    means = [r[1] for r in results]
+    stds = [r[2] for r in results]
+
+    plt.figure(figsize=(8,5))
+    plt.errorbar(buckets, means, yerr=stds, fmt='-o', capsize=4)
+    plt.xscale('log', base=2)  # optional: log-scale makes sense for bucket sizes
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    if title:
+        plt.title(title)
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.tight_layout()
+    plt.show()
+
+# Example usage (unchanged)
+bucket_counts = [1000 * i for i in range(1, 6)]  # [1000, 2000, 3000, 4000, 5000]
+flow_size = 200
+trials = 500
+res = run_mean_recalls_for_buckets(bucket_counts,
+                                   flow_size,
+                                   trials=trials,
+                                   rows=3,
+                                   k=2,
+                                   rc=4,
+                                   p=int(1e9+7),
+                                   flow_range=1000,
+                                   sketch_type="Traditional",
+                                   metric='flow_exact',   # change to 'flow_exact' to use strict trial-level exactness
+                                   seed=123,
+                                   verbose=True,
+                                   out_csv="mean_recalls.csv")
+
+print("Results:")
+for b, m, s in res:
+    print(f"buckets={b:5d} mean={m:.6f} std={s:.6f}")
+for b, m, s in res:
+    print(f"{m} ,", end="")
+
+plot_mean_recalls(res, title=f"Mean metric (flow_size={flow_size}, trials={trials})")
