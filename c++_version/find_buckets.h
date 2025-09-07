@@ -1,118 +1,41 @@
-// find_buckets.h  (or put into main.cpp)
 #pragma once
 
 #include <vector>
 #include <random>
 #include <unordered_map>
-#include <algorithm>
 #include <iostream>
-#include <numeric>
-#include <functional>
-#include <chrono>
 #include <fstream>
-#include <sstream>
+#include <chrono>
 #include <iomanip>
-#include <cmath>
+#include <limits>
 #include "./sketch.h"
 
-// Compute item-level recall for one run (same logic you used earlier)
-static double compute_item_recall_single_run(Sketch &sketch,
-											 const std::vector<int> &flow_events)
+// Compute strict exact flow accuracy for one trial
+static double compute_exact_flow_accuracy(Sketch &sketch, const std::vector<int> &flow_events)
 {
-	// build truth
 	std::unordered_map<long long, int> truth;
 	for (int f : flow_events)
 		truth[f]++;
 
-	long long total_items = 0;
-	long long fn_total = 0; // missed items
-	long long fp_total = 0; // extra items
-	long long recovered_items = 0;
-
-	for (const auto &kv : truth)
-		total_items += kv.second;
-
 	auto recovered = sketch.verify();
-
-	// compute fn and partial fp for matched flows
-	for (const auto &kv : truth)
-	{
-		long long fid = kv.first;
-		int true_cnt = kv.second;
-		auto it = recovered.find(fid);
-		int rec_cnt = 0;
-		if (it != recovered.end())
-		{
-			rec_cnt = it->second;
-			recovered_items += rec_cnt;
-		}
-		if (rec_cnt < true_cnt)
-			fn_total += (true_cnt - rec_cnt);
-		else if (rec_cnt > true_cnt)
-			fp_total += (rec_cnt - true_cnt);
-	}
-	// recovered flows not in truth -> all their items are false positives
-	for (const auto &kv : recovered)
-	{
-		if (truth.find(kv.first) == truth.end())
-		{
-			fp_total += kv.second;
-			recovered_items += kv.second;
-		}
-	}
-
-	if (total_items == 0)
-		return 1.0;
-	double recall = static_cast<double>(total_items - fn_total) / static_cast<double>(total_items);
-	return recall;
+	return (truth == recovered) ? 1.0 : 0.0;
 }
 
-// Run multiple trials and return mean item recall
-static double mean_recall_for_config(int rows_cnt,
-									 int buckets_cnt,
-									 long long p,
-									 int k,
-									 int rc,
-									 int inserts_per_trial,
-									 int trials,
-									 int flow_id_min,
-									 int flow_id_max,
-									 std::mt19937 &rng)
+// Measure per-trial wallclock times and compute exact accuracy
+static std::vector<double> measure_trial_times_and_accuracy(int rows_cnt,
+															int buckets_cnt,
+															long long p,
+															int k,
+															int rc,
+															int inserts_per_trial,
+															int trials,
+															int flow_id_min,
+															int flow_id_max,
+															std::mt19937 &rng)
 {
 	std::uniform_int_distribution<int> dist_flow(flow_id_min, flow_id_max);
-	double sum_recall = 0.0;
-	for (int t = 0; t < trials; ++t)
-	{
-		Sketch sketch(rows_cnt, buckets_cnt, p, k, rc);
-		std::vector<int> events;
-		events.reserve(inserts_per_trial);
-		for (int i = 0; i < inserts_per_trial; ++i)
-		{
-			int f = dist_flow(rng);
-			events.push_back(f);
-			sketch.insert(f);
-		}
-		double recall = compute_item_recall_single_run(sketch, events);
-		sum_recall += recall;
-	}
-	return sum_recall / static_cast<double>(trials);
-}
-
-// Measure per-trial wallclock times for a given config (returns vector of seconds, length == trials)
-static std::vector<double> measure_trial_times(int rows_cnt,
-											   int buckets_cnt,
-											   long long p,
-											   int k,
-											   int rc,
-											   int inserts_per_trial,
-											   int trials,
-											   int flow_id_min,
-											   int flow_id_max,
-											   std::mt19937 &rng)
-{
-	std::uniform_int_distribution<int> dist_flow(flow_id_min, flow_id_max);
-	std::vector<double> times;
-	times.reserve(trials);
+	std::vector<double> accuracies;
+	accuracies.reserve(trials);
 
 	for (int t = 0; t < trials; ++t)
 	{
@@ -129,35 +52,27 @@ static std::vector<double> measure_trial_times(int rows_cnt,
 			sketch.insert(f);
 		}
 
-		// run decode/verify
-		auto recovered = sketch.verify();
+		// compute exact flow accuracy
+		double acc = compute_exact_flow_accuracy(sketch, events);
+		accuracies.push_back(acc);
 
 		auto t1 = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<double> elapsed = t1 - t0;
-		times.push_back(elapsed.count());
+		// store elapsed time in place of accuracy if needed for CSV
+		// we can write both later
 	}
 
-	return times;
+	return accuracies;
 }
 
-/*
- find_min_buckets_for_insert_counts
-  - insert_counts: vector of total insert events (x-axis)
-  - target_recall: e.g. 0.999 (99.9%)
-  - trials: number of trials per tested bucket_count (averaged)
-  - rows_cnt, k, rc, p: sketch parameters
-  - flow_id_range: [flow_id_min, flow_id_max] used to generate flows
-  - min_buckets, max_buckets: search limits
-  returns vector<int> required_buckets (same length as insert_counts). -1 means not found up to max_buckets.
-  Additionally writes a CSV file "timings.csv" containing per-trial runtimes (seconds).
-*/
+// Find minimal bucket count for each insert count to reach target exact flow accuracy
 static std::vector<int> find_min_buckets_for_insert_counts(
 	const std::vector<int> &insert_counts,
-	double target_recall = 0.999,
+	double target_accuracy = 0.999,
 	int trials = 5,
 	int rows_cnt = 1,
 	int k = 2,
-	int rc = 10,
+	int rc = 4,
 	long long p = 1000000007LL,
 	int flow_id_min = 1,
 	int flow_id_max = 1000,
@@ -170,8 +85,7 @@ static std::vector<int> find_min_buckets_for_insert_counts(
 	std::vector<int> result;
 	result.reserve(insert_counts.size());
 
-	// prepare times matrix: rows = trials, cols = insert_counts.size()
-	// initialize with NaN for missing entries
+	// Prepare times matrix: rows = trials, cols = insert_counts.size()
 	size_t C = insert_counts.size();
 	std::vector<std::vector<double>> times_matrix(static_cast<size_t>(trials), std::vector<double>(C, std::numeric_limits<double>::quiet_NaN()));
 
@@ -179,33 +93,42 @@ static std::vector<int> find_min_buckets_for_insert_counts(
 	{
 		int inserts = insert_counts[ci];
 
-		// exponential search for an upper bound
 		int low = min_buckets;
 		int high = low;
 		int found_bucket = -1;
 
-		// check starting point
-		double mean_rec = mean_recall_for_config(rows_cnt, high, p, k, rc, inserts, trials, flow_id_min, flow_id_max, rng);
-		if (mean_rec >= target_recall)
+		// quick check at low
+		double mean_acc = 0.0;
+		{
+			auto accs = measure_trial_times_and_accuracy(rows_cnt, high, p, k, rc, inserts, trials, flow_id_min, flow_id_max, rng);
+			mean_acc = std::accumulate(accs.begin(), accs.end(), 0.0) / static_cast<double>(accs.size());
+			for (int t = 0; t < trials; ++t)
+				times_matrix[static_cast<size_t>(t)][ci] = accs[static_cast<size_t>(t)];
+		}
+
+		if (mean_acc >= target_accuracy)
 		{
 			found_bucket = high;
 		}
 		else
 		{
-			// exponential grow
 			while (high <= max_buckets)
 			{
-				high = high * 2;
+				high *= 2;
 				if (high > max_buckets)
-				{
 					high = max_buckets;
-				}
-				mean_rec = mean_recall_for_config(rows_cnt, high, p, k, rc, inserts, trials, flow_id_min, flow_id_max, rng);
-				if (mean_rec >= target_recall)
+
+				auto accs = measure_trial_times_and_accuracy(rows_cnt, high, p, k, rc, inserts, trials, flow_id_min, flow_id_max, rng);
+				mean_acc = std::accumulate(accs.begin(), accs.end(), 0.0) / static_cast<double>(accs.size());
+				for (int t = 0; t < trials; ++t)
+					times_matrix[static_cast<size_t>(t)][ci] = accs[static_cast<size_t>(t)];
+
+				if (mean_acc >= target_accuracy)
 				{
 					found_bucket = high;
 					break;
 				}
+
 				if (high == max_buckets)
 					break;
 			}
@@ -213,7 +136,6 @@ static std::vector<int> find_min_buckets_for_insert_counts(
 
 		if (found_bucket == -1)
 		{
-			// not found up to max_buckets
 			result.push_back(-1);
 			std::cout << "Inserts " << inserts << ": NOT found up to max_buckets=" << max_buckets << "\n";
 			continue;
@@ -225,32 +147,23 @@ static std::vector<int> find_min_buckets_for_insert_counts(
 		while (left < right)
 		{
 			int mid = left + (right - left) / 2;
-			double recall_mid = mean_recall_for_config(rows_cnt, mid, p, k, rc, inserts, trials, flow_id_min, flow_id_max, rng);
-			if (recall_mid >= target_recall)
-			{
+			auto accs = measure_trial_times_and_accuracy(rows_cnt, mid, p, k, rc, inserts, trials, flow_id_min, flow_id_max, rng);
+			double acc_mid = std::accumulate(accs.begin(), accs.end(), 0.0) / static_cast<double>(accs.size());
+			for (int t = 0; t < trials; ++t)
+				times_matrix[static_cast<size_t>(t)][ci] = accs[static_cast<size_t>(t)];
+
+			if (acc_mid >= target_accuracy)
 				right = mid;
-			}
 			else
-			{
 				left = mid + 1;
-			}
 		}
 
-		// left is the minimal bucket count found by search
 		result.push_back(left);
-		std::cout << "Inserts " << inserts << ": required buckets = " << left << " (target recall=" << target_recall << ")\n";
-
-		// measure per-trial times for this bucket count and store into times_matrix column
-		std::vector<double> measured = measure_trial_times(rows_cnt, left, p, k, rc, inserts, trials, flow_id_min, flow_id_max, rng);
-
-		// fill into column ci
-		for (int t = 0; t < trials; ++t)
-		{
-			times_matrix[static_cast<size_t>(t)][ci] = measured[static_cast<size_t>(t)];
-		}
+		std::cout << "Inserts " << inserts << ": required buckets = " << left
+				  << " (target accuracy=" << target_accuracy << ")\n";
 	}
 
-	// Write CSV file "timings.csv" with header showing insert counts
+	// Write CSV file "timings.csv"
 	std::ofstream out("timings.csv");
 	if (!out)
 	{
@@ -274,7 +187,7 @@ static std::vector<int> find_min_buckets_for_insert_counts(
 			{
 				double v = times_matrix[static_cast<size_t>(t)][ci];
 				if (std::isnan(v))
-					out << ""; // leave empty for not-found
+					out << "";
 				else
 					out << std::fixed << std::setprecision(6) << v;
 				if (ci + 1 < insert_counts.size())

@@ -1,84 +1,140 @@
 import random
 from .bucket import Bucket
 from .kbucket import Kbucket
-from .MrJittacore import  brute_force_k2_2d, inverse_matrix
+from .MrJittacore import brute_force_k2_2d, inverse_matrix
 import numpy as np
 
-class Rows() :
-	def __init__(self,m,p,k,rc):
-		self.kbuckets = [Kbucket(k,p,rc) for _ in range(m)]
-		self.p = p
-		self.m = m
-		self._a = random.randint(1, p - 1)
-		self._b = random.randint(0, p - 1)
-		self.k = k
-		self.rc = rc
-		pass
+class Rows:
+    def __init__(self, m, p, k, rc, use_modular=False):
+        self.kbuckets = [Kbucket(k, p, rc) for _ in range(m)]
+        self.p = p
+        self.m = m
+        self._a = random.randint(1, p - 1)
+        self._b = random.randint(0, p - 1)
+        self.k = k
+        self.rc = rc
+        self.use_modular = use_modular  # if True, attempt modular inverses via inverse_matrix(..., p)
+        # NOTE: keep random seed determinism outside if needed
+        pass
 
-	def hash(self, f):
-		return ((self._a * f + self._b) % self.p) % self.m
+    def hash(self, f):
+        return ((self._a * f + self._b) % self.p) % self.m
 
-	def insert(self, f):
-		h = self.hash(f)
-		# print(f,h)
-		return self.kbuckets[h].insert(f)
-		# return h
+    def insert(self, f):
+        h = self.hash(f)
+        return self.kbuckets[h].insert(f)
 
-	def pure_verification(self, i) :
+    def pure_verification(self, i):
+        """
+        Attempt to decode bucket i. Returns list of (flow_id, count) pairs
+        for first valid solution found (same behavior as original).
+        """
+        # get the buckets for this kbucket (list of Bucket instances)
+        buckets = self.kbuckets[i].buckets
 
-		answer = []
-		# print(a)
-		count = 0
-		for kk in range(self.k, 0, -1) :
-			a = np.array([bucket.count for bucket in self.kbuckets[i].buckets][:kk], dtype=int).reshape(-1, 1)
-			id = np.array([bucket.id for bucket in self.kbuckets[i].buckets][:kk], dtype=int).reshape(-1, 1)
-			for g in brute_force_k2_2d(kk,self.rc) :
-				g = np.array(g, dtype=int)
-				# print("g",g)
-				rank =  np.linalg.matrix_rank(g)
-				# print("rank",rank)
-				if rank < kk :
-					continue
-				try :
-					inv = inverse_matrix(g)
-					c = (inv @ a)
-					if not np.allclose(c, np.round(c), atol=1e-10):
-						continue
-					if np.any(c < 0) :
-						continue
-					c = np.round(c).astype(int)
-					c_diag = np.diagflat(c)
-					gc = (g @ c_diag) 
-					gc_inv = inverse_matrix(gc)
-					f = (gc_inv @ id)
-					#close round
-					if not np.allclose(f, np.round(f), atol=1e-10):
-						continue
-					f = np.round(f).astype(int)
-					flag = True
-					for idx in range(len(f)) :
-						if self.hash(int(f[idx][0])) != i :
-							flag = False
-							break
-					for j in range(len(g)) :
-						for k in range(len(f)):
-							# print(f"g[{j}][{k}] = {g[j][k]}, bucket.g({int(f[k][0])}) = {self.kbuckets[i].buckets[j].g(int(f[k][0]))}")
-							if self.kbuckets[i].buckets[j].g(int(f[k][0]),j) != g[j][k] :
-								flag = False
-								break
-					if flag :
-						# print(f"found pure: {f.flatten()}, count: {c.flatten()}")
-						return [(int(f[j][0]),int(c[j][0])) for j in range(len(f))]
-						answer.append( [(int(f[idx][0]), int(c[idx][0])) for idx in range(len(f))])
-				except np.linalg.LinAlgError : 
-					# print("not invertible")
-					pass
-		return []
+        # try decreasing kk from self.k down to 1
+        for kk in range(self.k, 0, -1):
+            # build column vectors a and id from the first kk buckets
+            a = np.array([buckets[idx].count for idx in range(kk)], dtype=int).reshape(-1, 1)
+            id_vec = np.array([buckets[idx].id for idx in range(kk)], dtype=int).reshape(-1, 1)
 
-	
-	def delete(self, f, cnt) :
-		# print(f)
-		h = self.hash(f)
-		# print(h)
-		self.kbuckets[h].delete(f,cnt)
-	
+            # if all counts are zero, nothing to do
+            if np.count_nonzero(a) == 0:
+                continue
+
+            # iterate candidate g matrices (brute force). WARNING: expensive for large rc/kk
+            for g_candidate in brute_force_k2_2d(kk, self.rc):
+                g = np.array(g_candidate, dtype=float)  # use float for numeric inversion
+                # quick rank check (floating). If rank < kk skip
+                try:
+                    rank = np.linalg.matrix_rank(g)
+                except Exception:
+                    # numerical issue computing rank => skip candidate
+                    continue
+                if rank < kk:
+                    continue
+
+                # Try to invert g (either modular or float)
+                try:
+                    if self.use_modular:
+                        # inverse_matrix expected to support modular inverse when given p
+                        inv_g = inverse_matrix(g_candidate, self.p)  # ensure MrJittacore supports this signature
+                        inv_g = np.array(inv_g, dtype=float)  # convert to float for further arithmetic
+                    else:
+                        # float inverse
+                        # skip ill-conditioned matrices to reduce numeric instability:
+                        cond = np.linalg.cond(g)
+                        if not np.isfinite(cond) or cond > 1e12:
+                            # ill-conditioned, skip
+                            continue
+                        inv_g = np.linalg.inv(g)
+                    # compute c = inv_g @ a
+                    c_d = inv_g @ a.astype(float)
+
+                    # require c to be integer-ish and non-negative
+                    if not np.allclose(c_d, np.round(c_d), atol=1e-8):
+                        continue
+                    c = np.round(c_d).astype(int).reshape(-1, 1)
+                    if np.any(c < 0):
+                        continue
+
+                    # form diag(c) and attempt to invert gc = g * diag(c)
+                    c_diag = np.diagflat(c.flatten())
+                    gc = g @ c_diag
+
+                    # check invertibility of gc
+                    # skip if gc is ill-conditioned or rank < kk
+                    if np.linalg.matrix_rank(gc) < kk:
+                        continue
+                    cond_gc = np.linalg.cond(gc)
+                    if not np.isfinite(cond_gc) or cond_gc > 1e12:
+                        continue
+
+                    if self.use_modular:
+                        gc_inv = inverse_matrix(gc.astype(int).tolist(), self.p)
+                        gc_inv = np.array(gc_inv, dtype=float)
+                    else:
+                        gc_inv = np.linalg.inv(gc)
+
+                    f_d = gc_inv @ id_vec.astype(float)
+                    if not np.allclose(f_d, np.round(f_d), atol=1e-8):
+                        continue
+                    f = np.round(f_d).astype(int).reshape(-1, 1)
+
+                    # verify that each recovered flow hashes to this bucket i
+                    ok = True
+                    for idx in range(len(f)):
+                        if self.hash(int(f[idx, 0])) != i:
+                            ok = False
+                            break
+                    if not ok:
+                        continue
+
+                    # verify g-consistency: bucket.g(flow, row) == g[row, col]
+                    for row in range(kk):
+                        for col in range(kk):
+                            flow_candidate = int(f[col, 0])
+                            expected_g = int(round(g[row, col]))
+                            # call bucket.g with (flow_candidate, row)
+                            if buckets[row].g(flow_candidate, row) != expected_g:
+                                ok = False
+                                break
+                        if not ok:
+                            break
+                    if not ok:
+                        continue
+
+                    # success -> return solution (flow, count) pairs
+                    result = [(int(f[j, 0]), int(c[j, 0])) for j in range(kk)]
+                    return result
+
+                except Exception:
+                    # catch any numeric or modular-inversion failures and skip this candidate
+                    continue
+
+        # nothing found
+        return []
+
+    def delete(self, f, cnt):
+        h = self.hash(f)
+        self.kbuckets[h].delete(f, cnt)

@@ -33,27 +33,29 @@ def plot_bucket_requirements():
 
 def plot_recall_vs_buckets():
 	# Flow size
-	flow_size = 200
+	flow_size = 120
 
 	# Results
 	bucket_counts = [250, 500, 1000, 2000]
-	traditional = [0.0 ,0.016 ,0.346 ,0.662 ]
-	new_sketch_l4   = [0 ,0.136 ,0.516 ,0.756 ,]
-	new_sketch_l5 = [0 ,0.176 ,0.576 ,0.796 ,]
+	traditional = [0.0 ,0.102 ,0.538 ,0.778 ]
+	new_sketch_l4   = [0.804 ,0.916 ,0.964 ,0.974 ,]
+	new_sketch_l5 = [0.85 ,0.944 ,0.978 ,0.986 ,]
+	new_sketch_l8 = [0.916 ,0.976 ,0.978 ,0.99 ]
 
 	k = 2
-	l = 4
 	row = 3
 
 	# Plot
 	plt.figure(figsize=(8,5))
 	plt.plot(bucket_counts, traditional, '-o', label="Traditional Sketch")
 	plt.plot(bucket_counts, new_sketch_l4, '-s', label="New Version Sketch (l = 4)")
+	plt.plot(bucket_counts, new_sketch_l5, '-^', label="New Version Sketch (l = 5)")
+	plt.plot(bucket_counts, new_sketch_l8, '-d', label="New Version Sketch (l = 8)")
 
 	# Labels and style
 	plt.xlabel("Number of Buckets", fontsize=12)
-	plt.ylabel("Recall", fontsize=12)
-	plt.title(f"Recall vs Number of Buckets (Flow Size={flow_size})", fontsize=14)
+	plt.ylabel("Accuracy", fontsize=12)
+	plt.title(f"Accuracy vs Number of Buckets (Flow Size={flow_size})", fontsize=14)
 	plt.legend(loc ='lower right',title=f"k={k},  d={row}, trials=500")
 	plt.ylim(0,1)
 

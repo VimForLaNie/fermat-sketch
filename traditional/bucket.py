@@ -1,4 +1,4 @@
-class Bucket() :
+class Bucket :
 	def __init__(self,p):
 		self.count = 0
 		self.id = 0
@@ -12,7 +12,7 @@ class Bucket() :
 
 	def delete(self, flow_id, cnt):
 		self.count -= cnt
-		self.id = (self.id - flow_id) % self.p
+		self.id = (self.id - flow_id * cnt) % self.p
 				
 
 	def is_pure(self, j , hash, f = None) :

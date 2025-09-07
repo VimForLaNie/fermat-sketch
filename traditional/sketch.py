@@ -25,7 +25,7 @@ class Sketch :
 			i, j = queue.popleft()
 			bucket = self.rows[i].buckets[j]
 			# print(f"Processing bucket at row {i}, index {j} with count {bucket.count} and id {bucket.id}")
-			if bucket.is_pure(j, self.rows[i].hash):
+			if bucket.is_pure(j, self.rows[i].hash_index):
 				f_prime = bucket.id * pow(bucket.count, self.p - 2, self.p) % self.p
 				if f_prime in checked_pure:
 					continue
@@ -34,8 +34,8 @@ class Sketch :
 				count = bucket.count
 				# print(f"Found pure bucket! Flow ID: {f_prime}, Count: {bucket.count}")
 				for i2, row2 in enumerate(self.rows):
-					h = row2.hash(f_prime)
+					h = row2.hash_index(f_prime)
 					row2.buckets[h].delete(f_prime, count)
 		return dict(self.flowset)
 
-
+	

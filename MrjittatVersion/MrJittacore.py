@@ -1,85 +1,85 @@
-import numpy as np
-
-# def matrix_rank_finite_field(matrix, p):
-#     """
-#     Finds the rank of a matrix over a finite field modulo p.
-
-#     Args:
-#         matrix: A NumPy array representing the matrix.
-#         p: The modulus of the finite field.
-
-#     Returns:
-#         The rank of the matrix.
-#     """
-#     # Make a copy to avoid modifying the original matrix
-#     matrix = np.copy(matrix).astype(int)
-
-#     rows, cols = matrix.shape
-#     rank = 0
-#     for col in range(cols):
-#         pivot_row = rank
-#         while pivot_row < rows and matrix[pivot_row, col] % p == 0:
-#             pivot_row += 1
-
-#         if pivot_row < rows:
-#             # Swap rows
-#             matrix[[rank, pivot_row]] = matrix[[pivot_row, rank]]
-
-#             # Make the pivot element 1 (modulo p)
-#             pivot_element = matrix[rank, col] % p
-#             inv_pivot = pow(int(pivot_element), -1, p)
-#             matrix[rank] = (matrix[rank] * inv_pivot) % p
-
-#             # Eliminate other rows
-#             for i in range(rows):
-#                 if i != rank:
-#                     factor = matrix[i, col] % p
-#                     matrix[i] = (matrix[i] - factor * matrix[rank]) % p
-#             rank += 1
-
-#     return rank
-
-# Example Usage:
-# matrix = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-# p = 3
-# rank = matrix_rank_finite_field(matrix, p)
-# print(f"The rank of the matrix modulo {p} is: {rank}")
-
-# matrix2 = np.array([[1, 1, 0], [0, 1, 1], [1, 0, 1]])
-# p2 = 2
-# rank2 = matrix_rank_finite_field(matrix2, p2)
-# print(f"The rank of the matrix modulo {p2} is: {rank2}")
-
 from itertools import product
-
-def brute_force_k2_2d(k,rc):
-    length = k * k
-    prime = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97]
-    for combo in product(range(0, rc), repeat=length):  # 1..k instead of 0..k-1
-    # for combo in product([2,3,5,7,11,13,17,19][:rc], repeat=length):  # 1..k instead of 0..k-1
-        matrix = [list(combo[i*k:(i+1)*k]) for i in range(k)]
-        matrix = [[prime[matrix[i][j] + i * rc] for j in range(k)] for i in range(k)]
-        # print(f"Trying matrix: {matrix}")
-        yield matrix
-        
 import numpy as np
 
-def inverse_matrix(matrix, p = None):
+# primes must have at least k * rc elements (or k*rc + max_offset)
+PRIMES = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97,
+          101,103,107,109,113,127,131,137,139,149,151,157,163,167,173,179,181,
+          191,193,197,199,211,223,227,229,233,239,241,251,257,263,269,271,277,281]
+
+def brute_force_k2_2d(k, rc):
     """
-    Compute the inverse of a matrix using NumPy.
-    
-    Args:
-        matrix (list[list[float]] or np.ndarray): The square matrix.
-        
-    Returns:
-        np.ndarray: The inverse matrix.
+    Generate k x k matrices where each entry is chosen from 0..rc-1,
+    then mapped through prime[index + i*rc] as in your original code.
+
+    WARNING: search space size = rc^(k*k) — can be enormous.
     """
-    if p is not None :
-        matrix = np.array(matrix, dtype=int) % p
-        inv = np.linalg.inv(matrix).astype(int) % p
-        for i in range(len(inv)) :
-            for j in range(len(inv)) :
-                inv[i][j] = inv[i][j] % p
-        return inv
-    else :
-        return np.linalg.inv(matrix)
+    length = k * k
+    # check primes length
+    needed = k * rc
+    if needed > len(PRIMES):
+        raise ValueError(f"PRIMES list too small: need at least {needed} primes, have {len(PRIMES)}")
+
+    for combo in product(range(0, rc), repeat=length):
+        mat_indices = [list(combo[i*k:(i+1)*k]) for i in range(k)]
+        # map indices to primes
+        matrix = [[PRIMES[mat_indices[i][j] + i * rc] for j in range(k)] for i in range(k)]
+        yield matrix
+
+
+# ---------- modular inverse for matrices via Gauss-Jordan mod p ----------
+def matrix_mod_inverse(A, p):
+    """
+    Compute inverse of integer matrix A modulo prime p.
+    A: list of lists or 2D numpy array (square)
+    returns: numpy.ndarray (dtype=int) of shape (n,n) with values in 0..p-1
+    raises: ValueError if singular modulo p
+    """
+    A = np.array(A, dtype=int) % p
+    n = A.shape[0]
+    if A.shape[0] != A.shape[1]:
+        raise ValueError("Only square matrices can be inverted")
+
+    # build augmented matrix [A | I]
+    aug = np.hstack([A.copy(), np.eye(n, dtype=int)])
+    # perform Gauss-Jordan elimination modulo p
+    for col in range(n):
+        # find pivot row with non-zero in this column
+        pivot = None
+        for r in range(col, n):
+            if aug[r, col] % p != 0:
+                pivot = r
+                break
+        if pivot is None:
+            raise ValueError("Matrix is singular modulo p")
+
+        # swap pivot row into place
+        if pivot != col:
+            aug[[col, pivot]] = aug[[pivot, col]]
+
+        # normalize pivot row: multiply by inv(pivot_val) mod p
+        pivot_val = int(aug[col, col] % p)
+        inv_pivot = pow(pivot_val, p - 2, p)  # p should be prime; uses Fermat
+        aug[col, :] = (aug[col, :] * inv_pivot) % p
+
+        # eliminate other rows
+        for r in range(n):
+            if r == col:
+                continue
+            factor = int(aug[r, col] % p)
+            if factor != 0:
+                aug[r, :] = (aug[r, :] - factor * aug[col, :]) % p
+
+    inv = aug[:, n:] % p
+    return inv.astype(int)
+
+
+def inverse_matrix(matrix, p=None):
+    """
+    If p is provided -> return modular inverse over GF(p) as numpy int array.
+    If p is None -> return standard numpy.linalg.inv (float).
+    """
+    mat = np.array(matrix)
+    if p is None:
+        return np.linalg.inv(mat.astype(float))
+    else:
+        return matrix_mod_inverse(mat, p)

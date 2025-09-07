@@ -139,6 +139,7 @@ namespace FindMeanRecalls
 		const std::string &out_filename = "mean_recalls.csv",
 		unsigned int seed = 0)
 	{
+		cout << "Finding mean exact accuracies for flow size " << flow_size << ", k=" << k << ", rc=" << rc << ", rows=" << rows_cnt << ", p=" << p << "\n";
 		std::random_device rd;
 		std::mt19937 rng(seed ? seed : rd());
 

@@ -9,17 +9,17 @@ class Rows() :
 		self.p = p
 		self.bucket_size = size
 
-	def hash(self, f):
+	def hash_index(self, f):
 		return ((self._a * f + self._b) % self.p) % self.bucket_size
 
 	def insert(self, f):
-		h = self.hash(f)
+		h = self.hash_index(f)
 		self.buckets[h].insert(f)
 		return h
 
 	
 	def delete(self, f, cnt) :
-		h = self.hash(f)
+		h = self.hash_index(f)
 		self.buckets[h].delete(f,cnt)
 			
 				

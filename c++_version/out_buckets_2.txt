@@ -1,0 +1,9 @@
+Inserts 40: required buckets = 4006 (target accuracy=0.99)
+Inserts 80: required buckets = 12362 (target accuracy=0.99)
+Inserts 120: required buckets = 19590 (target accuracy=0.99)
+Wrote timings.csv
+
+Summary (inserts -> required buckets):
+40 -> 4006
+80 -> 12362
+120 -> 19590

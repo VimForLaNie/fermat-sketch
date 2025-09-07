@@ -46,7 +46,7 @@ class Sketch :
 					for row in self.rows:
 						# print("delete",int(f),int(cnt))
 						row.delete(f, cnt)
-				self.flowset[f] += cnt
+					self.flowset[f] += cnt
 				stop = 0
 		return dict(self.flowset)
 
