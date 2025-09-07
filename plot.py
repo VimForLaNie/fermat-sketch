@@ -36,12 +36,10 @@ def plot_recall_vs_buckets():
 	flow_size = 200
 
 	# Results
-	bucket_counts = [1000, 2000, 3000, 4000, 5000]
-	traditional = [0.346 ,0.662 ,0.776 ,0.842 ,0.866]
-	new_sketch_l4   = [0.04409, 0.11926, 0.40447, 0.98527, 0.99915, 0.99909,0.99997,1]
-	new_sketch_l3 = [0.04458 ,0.11333 ,0.31356 ,0.97483 ,0.99564 ,0.99981 ,0.9999 ,0.99999 ]
-	new_sketch_l2 = [0.03638 ,0.09672 ,0.20468 ,0.93315 ,0.99136 ,0.99735 ,0.99818 ,0.99902 ,]
-
+	bucket_counts = [250, 500, 1000, 2000]
+	traditional = [0.0 ,0.016 ,0.346 ,0.662 ]
+	new_sketch_l4   = [0 ,0.136 ,0.516 ,0.756 ,]
+	new_sketch_l5 = [0 ,0.176 ,0.576 ,0.796 ,]
 
 	k = 2
 	l = 4
@@ -51,8 +49,6 @@ def plot_recall_vs_buckets():
 	plt.figure(figsize=(8,5))
 	plt.plot(bucket_counts, traditional, '-o', label="Traditional Sketch")
 	plt.plot(bucket_counts, new_sketch_l4, '-s', label="New Version Sketch (l = 4)")
-	plt.plot(bucket_counts, new_sketch_l3, '-^', label="New Version Sketch (l = 3)")
-	plt.plot(bucket_counts, new_sketch_l2, '-d', label="New Version Sketch (l = 2)")
 
 	# Labels and style
 	plt.xlabel("Number of Buckets", fontsize=12)

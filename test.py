@@ -204,6 +204,7 @@ def mean_and_std_for_config(buckets, flow_size, trials, rows, k, rc, p, flow_ran
     if verbose:
         print("")  # newline after progress line
 
+    # print(f" MAX VAL: {max(vals)}")
     mean_val = float(np.mean(vals)) if vals else 0.0
     std_val = float(np.std(vals, ddof=0)) if vals else 0.0
     return mean_val, std_val
@@ -279,7 +280,7 @@ def plot_mean_recalls(results, xlabel='Bucket count', ylabel='Mean item recall',
     plt.show()
 
 # Example usage (unchanged)
-bucket_counts = [1000 * i for i in range(1, 6)]  # [1000, 2000, 3000, 4000, 5000]
+bucket_counts = [250, 500, 1000, 2000]  # [1000, 2000, 3000, 4000, 5000]
 flow_size = 200
 trials = 500
 res = run_mean_recalls_for_buckets(bucket_counts,

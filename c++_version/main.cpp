@@ -53,10 +53,10 @@
 int main()
 {
 	int flow_size = 200; // single flow size
-	std::vector<int> bucket_counts = {500, 1000, 1500, 2000, 2500};
+	std::vector<int> bucket_counts = {250, 500, 1000, 2000};
 
 	auto means = FindMeanRecalls::find_mean_accuracies_for_buckets(
-		flow_size, bucket_counts, /*trials=*/100, /*rows=*/3, /*k=*/2, /*rc=*/4, /*p=*/1000000007LL);
+		flow_size, bucket_counts, /*trials=*/500, /*rows=*/1, /*k=*/2, /*rc=*/7, /*p=*/1000000007LL);
 	for (size_t i = 0; i < bucket_counts.size(); ++i)
 		std::cout << "b=" << bucket_counts[i] << " mean_accuracy=" << means[i] << "\n";
 	std::cout << "[";
