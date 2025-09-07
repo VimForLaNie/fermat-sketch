@@ -1,0 +1,8 @@
+[final] buckets=77, mean_item=0.989450
+Flow size 40: needs 77 buckets for Traditional
+[final] buckets=153, mean_item=0.990450
+Flow size 80: needs 153 buckets for Traditional
+[final] buckets=229, mean_item=0.989800
+Flow size 120: needs 229 buckets for Traditional
+[final] buckets=374, mean_item=0.990330
+Flow size 200: needs 374 buckets for Traditional

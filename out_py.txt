@@ -1,0 +1,9 @@
+╰─ python -u "/Users/pattad/sketch/test.py"                                                                    ─╯
+[final] buckets=3768, mean_item=0.989300
+Flow size 40: needs 3768 buckets for Traditional
+[final] buckets=7169, mean_item=0.989000
+Flow size 80: needs 7169 buckets for Traditional
+[final] buckets=12355, mean_item=0.991850
+Flow size 120: needs 12355 buckets for Traditional
+[final] buckets=16248, mean_item=0.989230
+Flow size 200: needs 16248 buckets for Traditional

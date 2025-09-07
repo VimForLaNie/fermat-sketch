@@ -1,0 +1,9 @@
+Inserts 40: required buckets = 12 (target recall=0.99)
+Inserts 80: required buckets = 22 (target recall=0.99)
+Inserts 120: required buckets = 31 (target recall=0.99)
+Wrote timings.csv
+
+Summary (inserts -> required buckets):
+40 -> 12
+80 -> 22
+120 -> 31
