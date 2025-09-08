@@ -1,5 +1,5 @@
 from collections import deque, defaultdict
-from .row import Rows
+from row import Rows
 
 
 class Sketch :

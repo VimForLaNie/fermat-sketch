@@ -1,4 +1,4 @@
-from .sketch import Sketch
+from sketch import Sketch
 from collections import Counter
 import random
 import matplotlib.pyplot as plt
@@ -58,6 +58,7 @@ def experiment_buckets(rows_cnt, buckets_list, element_range, element_counts, tr
 	for buckets_cnt in buckets_list:
 		fp_trials = []
 		fn_trials = []
+		success =[]
 		print(f"Running experiments for {buckets_cnt} buckets...")
 
 		for _ in range(trials):
@@ -65,7 +66,8 @@ def experiment_buckets(rows_cnt, buckets_list, element_range, element_counts, tr
 
 			# Generate random elements
 			# elements = random.sample(range(1, element_range), k=element_counts)
-			elements = [i for i in range(1,element_counts + 1)]
+			elements = random.choices(range(1, element_range), k=element_counts)
+			# elements = [i for i in range(1,element_counts + 1)]
 			original_counts = Counter(elements)
 
 			# Insert elements into sketch
@@ -83,10 +85,14 @@ def experiment_buckets(rows_cnt, buckets_list, element_range, element_counts, tr
 			# fp_trials.append(fp / len(original_counts))  # normalized
 			fp_trials.append(fp )
 			fn_trials.append(fn )
+			if fp + fn == 0 :
+				success.append(1)
+			else :
+				success.append(0)
 			# fn_trials.append(fn / len(original_counts))  # normalized
 
 		# Compute mean for this bucket count
-		print("success_rate : ", (element_counts - (sum(fn_trials) + sum(fp_trials))/ trials) / element_counts * 100)
+		print("success_rate : ", sum(success) / (len(success)) * 100)
 		mean_fp_list.append(sum(fp_trials) / trials)
 		mean_fn_list.append(sum(fn_trials) / trials)
 		acc = (element_counts - (sum(fn_trials) + sum(fp_trials))/ trials) / element_counts * 100
@@ -117,13 +123,13 @@ if __name__ == "__main__":
 	# rows_list = [3]
 	# buckets_cnt = 10000
 	# # bucket_list = [ 500, 1000, 1500, 2000, 2500, 3000,4000 , 5000]  # varying buckets
-	bucket_list = [100 * i for i in range(1, 24)]
-	element_range = 10000
+	bucket_list = [1000 * i for i in range(1, 24)]
+	element_range = 1000
 	# element_range_list = [20000 * i for i in range(1, 10)]  # varying element range
-	element_counts = 100
-	trials = 1000 # number of experiments per row count
+	element_counts = 40
+	trials = 500 # number of experiments per row count
 
-	fp_list, fn_list ,acc = experiment_buckets(2, bucket_list, element_range, element_counts, trials)
+	fp_list, fn_list ,acc = experiment_buckets(3, bucket_list, element_range, element_counts, trials)
 	# fp_list, fn_list = experiment_element_range(3, 40000, element_range_list, element_counts, trials)
 	plot_results_buckets(bucket_list, fp_list, fn_list,acc)
 	# plot_results_element_range(element_range_list, fp_list, fn_list)

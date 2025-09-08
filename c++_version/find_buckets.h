@@ -86,6 +86,7 @@ static std::vector<int> find_min_buckets_for_insert_counts(
 	result.reserve(insert_counts.size());
 
 	// Prepare times matrix: rows = trials, cols = insert_counts.size()
+	std::cout << "Finding minimal buckets for insert counts: k = " << k << ", rc = " << rc << ", rows = " << rows_cnt << ", p = " << p << "\n";
 	size_t C = insert_counts.size();
 	std::vector<std::vector<double>> times_matrix(static_cast<size_t>(trials), std::vector<double>(C, std::numeric_limits<double>::quiet_NaN()));
 

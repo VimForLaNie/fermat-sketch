@@ -1,5 +1,5 @@
 import random
-from .bucket import Bucket
+from bucket import Bucket
 class Kbucket() :
 	def __init__(self,k,p,rc):
 		self.buckets = [Bucket(p,rc,k) for _ in range(k)]

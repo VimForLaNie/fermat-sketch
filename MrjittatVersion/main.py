@@ -8,6 +8,7 @@ def experiment_buckets(rows_cnt, buckets_list, element_range, element_counts, tr
 	mean_fp_list = []
 	mean_fn_list = []
 	mean_acc_list = []
+	success = []
 	print(f"Experimenting with rows: {rows_cnt}, element range: {element_range}, element counts: {element_counts}, trials per bucket count: {trials}")
 
 	for buckets_cnt in buckets_list:
@@ -44,12 +45,18 @@ def experiment_buckets(rows_cnt, buckets_list, element_range, element_counts, tr
 			# fn_trials.append(fn / len(original_counts))  # normalized
 			acc = (element_counts - (fn + fp)) / element_counts * 100
 			acc_trials.append(acc)
+			if fp + fn == 0 :
+				success.append(1)
+			else :
+				success.append(0)
 
 		# Compute mean for this bucket count
 		print("success_rate : ", (element_counts - (sum(fn_trials) + sum(fp_trials))/ trials) / element_counts * 100)
 		mean_fp_list.append(sum(fp_trials) / trials)
 		mean_fn_list.append(sum(fn_trials) / trials)
 		mean_acc_list.append(sum(acc_trials) / trials)
+		success_rate = sum(success) / (len(success)) * 100
+		print(f"Buckets: {buckets_cnt}, Success Rate: {success_rate:.2f}%")
 
 		if debug:
 			print(f"Buckets: {buckets_cnt}, Mean FP: {mean_fp_list[-1]:.4f}, Mean FN: {mean_fn_list[-1]:.4f}")
@@ -118,7 +125,7 @@ debug = False
 bucket_list = [100 * i for i in range(1, 5)]
 element_range = 10000
 element_counts = 100
-trials = 5
+trials = 1000
 fp_list, fn_list ,acc = experiment_buckets(2, bucket_list, element_range, element_counts, trials)
 plot_results_buckets(bucket_list, fp_list, fn_list,acc)
 
