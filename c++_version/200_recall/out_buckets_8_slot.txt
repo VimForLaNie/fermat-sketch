@@ -1,8 +1,0 @@
-Finding mean exact accuracies for flow size 200, k=2, rc=8, rows=3, p=1000000007
-Testing bucket 1/4 (size=125) ...Testing bucket 2/4 (size=250) ...Testing bucket 3/4 (size=500) ...Testing bucket 4/4 (size=1000) ...Done testing 4 buckets.                           
-Wrote mean_recalls.csv
-b=125 mean_accuracy=0.758
-b=250 mean_accuracy=0.884
-b=500 mean_accuracy=0.932
-b=1000 mean_accuracy=0.964
-[0.758 ,0.884 ,0.932 ,0.964 ,]
