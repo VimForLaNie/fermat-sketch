@@ -1,7 +1,8 @@
 from sketch import Sketch
 from collections import Counter
 import random
-import matplotlib.pyplot as plt
+ # ...existing code...
+import argparse
 
 debug = True
 def check_flow_result(flow, s, verbose=True):
@@ -49,98 +50,116 @@ def check_flow_result(flow, s, verbose=True):
 	}
 
 
-def experiment_buckets(rows_cnt, buckets_list, element_range, element_counts, trials=5, p=int(1e9 + 7)):
-	mean_fp_list = []
-	mean_fn_list = []
-	mean_acc_list = []
-	print(f"Experimenting with rows: {rows_cnt}, element range: {element_range}, element counts: {element_counts}, trials per bucket count: {trials}")
 
-	for buckets_cnt in buckets_list:
-		fp_trials = []
-		fn_trials = []
-		success =[]
-		print(f"Running experiments for {buckets_cnt} buckets...")
+def run_experiment(rows_cnt, buckets_cnt, element_range, max_count_per_flow, trials, p=int(1e9 + 7), verbose=False):
+	success = 0
+	for t in range(trials):
+		sketch = Sketch(rows_cnt, buckets_cnt, p)
+		# Insert all flow IDs in the range, each with a random count between 1 and max_count_per_flow
+		flow_ids = list(range(1, element_range + 1))
+		elements = []
+		flow_counts = {}
+		for fid in flow_ids:
+			cnt = random.randint(1, max_count_per_flow)
+			elements.extend([fid] * cnt)
+			flow_counts[fid] = cnt
+		# Insert elements into sketch
+		for elem in elements:
+			for row in range(rows_cnt):
+				sketch.rows[row].insert(elem)
+		recovered = sketch.verify()
+		fp = sum(1 for f in recovered if f not in flow_counts)
+		fn = sum(1 for f in flow_counts if f not in recovered)
+		if fp == 0 and fn == 0:
+			# Also check counts match
+			if all(recovered[f] == flow_counts[f] for f in flow_counts):
+				success += 1
+		if verbose and (t % max(1, trials // 10) == 0 or t == trials - 1):
+			print(f"  Trial {t+1}/{trials}: Successes so far = {success}")
+	return success
 
-		for _ in range(trials):
-			sketch = Sketch(rows_cnt, buckets_cnt, p)
-
-			# Generate random elements
-			# elements = random.sample(range(1, element_range), k=element_counts)
-			elements = random.choices(range(1, element_range), k=element_counts)
-			# elements = [i for i in range(1,element_counts + 1)]
-			original_counts = Counter(elements)
-
-			# Insert elements into sketch
-			for elem in elements:
-				for row in range(rows_cnt):
-					sketch.rows[row].insert(elem)
-
-			# Recover flow counts
-			recovered = sketch.verify()
-
-			# Calculate false positives and false negatives
-			fp = sum(1 for f in recovered if f not in original_counts)
-			fn = sum(1 for f in original_counts if f not in recovered)
-
-			# fp_trials.append(fp / len(original_counts))  # normalized
-			fp_trials.append(fp )
-			fn_trials.append(fn )
-			if fp + fn == 0 :
-				success.append(1)
-			else :
-				success.append(0)
-			# fn_trials.append(fn / len(original_counts))  # normalized
-
-		# Compute mean for this bucket count
-		print("success_rate : ", sum(success) / (len(success)) * 100)
-		mean_fp_list.append(sum(fp_trials) / trials)
-		mean_fn_list.append(sum(fn_trials) / trials)
-		acc = (element_counts - (sum(fn_trials) + sum(fp_trials))/ trials) / element_counts * 100
-		mean_acc_list.append(acc)
-
-		if debug:
-			print(f"Buckets: {buckets_cnt}, Mean FP: {mean_fp_list[-1]:.4f}, Mean FN: {mean_fn_list[-1]:.4f}")
-
-	return mean_fp_list, mean_fn_list, mean_acc_list
+def binary_search_buckets(rows_cnt, element_range, max_count_per_flow, required_accuracy, trials, p=int(1e9 + 7), min_buckets=1, max_buckets=100000, verbose=False):
+	left = min_buckets
+	right = max_buckets
+	answer = None
+	while left <= right:
+		mid = (left + right) // 2
+		print(f"Testing buckets: {mid}")
+		success = run_experiment(rows_cnt, mid, element_range, max_count_per_flow, trials, p, verbose=verbose)
+		acc = success / trials
+		print(f"Buckets: {mid}, Success: {success}/{trials}, Accuracy: {acc*100:.4f}%")
+		if acc >= required_accuracy:
+			answer = mid
+			right = mid - 1
+		else:
+			left = mid + 1
+	return answer
 
 
-def plot_results_buckets(buckets_list, fp_list, fn_list,acc):
-	plt.figure(figsize=(10, 6))
-	plt.plot(buckets_list,acc , marker='o', label="Accuracy Rate")
-	# plt.plot(buckets_list, fn_list, marker='x', label="Mean False Negative Rate")
-	plt.xlabel("Number of Buckets")
-	plt.ylabel("Rate")
-	plt.title("Accuracy vs. Number of Buckets")
-	plt.legend()
-	plt.grid(True)
-	plt.show()
+	pass # plotting removed
+
 
 
 
 if __name__ == "__main__":
-	# rows_list = [100, 500, 1000, 1500, 2000, 2500, 3000]  # varying rows
-	# # rows_list = [100,500,1000,1500,2000]
-	# rows_list = [3]
-	# buckets_cnt = 10000
-	# # bucket_list = [ 500, 1000, 1500, 2000, 2500, 3000,4000 , 5000]  # varying buckets
-	bucket_list = [1000 * i for i in range(1, 24)]
-	element_range = 1000
-	# element_range_list = [20000 * i for i in range(1, 10)]  # varying element range
-	element_counts = 40
-	trials = 500 # number of experiments per row count
+	parser = argparse.ArgumentParser(description="FermatSketch experiment runner")
+	parser.add_argument('--rows', type=int, default=3, help='Number of rows in sketch')
+	parser.add_argument('--element_range', type=int, nargs='+', default=[1000], help='List of flow ID ranges to test (e.g. 1000 2000 5000)')
+	parser.add_argument('--max_count_per_flow', type=int, default=10, help='Maximum count per flow ID (each flow ID gets random count between 1 and this value)')
+	parser.add_argument('--accuracy', type=float, default=99.9, help='Required accuracy in percent (e.g., 99.9)')
+	parser.add_argument('--trials', type=int, default=None, help='Number of trials per experiment (default: 10x accuracy)')
+	parser.add_argument('--min_buckets', type=int, default=1, help='Minimum buckets to search')
+	parser.add_argument('--max_buckets', type=int, default=100000, help='Maximum buckets to search')
+	parser.add_argument('--prime', type=int, default=int(1e9+7), help='Prime modulus p')
+	parser.add_argument('--verbose', action='store_true', help='Print progress information during trials')
+	args = parser.parse_args()
 
-	fp_list, fn_list ,acc = experiment_buckets(3, bucket_list, element_range, element_counts, trials)
-	# fp_list, fn_list = experiment_element_range(3, 40000, element_range_list, element_counts, trials)
-	plot_results_buckets(bucket_list, fp_list, fn_list,acc)
-	# plot_results_element_range(element_range_list, fp_list, fn_list)
-	# rows = 2
-	# buckets = 100
-	# flow = random.choices(range(1, 100), k=100)
-	# sketch = Sketch(rows,buckets,p= int(1e9 + 7))
-	# print("flow",flow)
-	# for f in flow :
-	# 	sketch.insert(f)
-	# s = sketch.verify()
-	# check_flow_result(flow, s)
-	# print("s",s)
+	required_accuracy = args.accuracy / 100.0
+	if args.trials is not None:
+		trials = args.trials
+	else:
+		# Linear mapping: trials = int(1000 / (1 - required_accuracy))
+		if required_accuracy >= 1.0:
+			trials = 1000000
+		else:
+			trials = int(1000 / (1 - required_accuracy))
+
+	print(f"Running FermatSketch experiments with rows={args.rows}, accuracy={args.accuracy}%, trials={trials}")
+	import csv
+	results = []
+	for element_range in args.element_range:
+		print(f"\nTesting element_range={element_range}")
+		min_buckets = binary_search_buckets(
+			rows_cnt=args.rows,
+			element_range=element_range,
+			max_count_per_flow=args.max_count_per_flow,
+			required_accuracy=required_accuracy,
+			trials=trials,
+			p=args.prime,
+			min_buckets=args.min_buckets,
+			max_buckets=args.max_buckets,
+			verbose=args.verbose
+		)
+		if min_buckets is not None:
+			print(f"Minimum buckets required for element_range={element_range} at {args.accuracy}% accuracy: {min_buckets}")
+		else:
+			print(f"Could not achieve required accuracy for element_range={element_range} within bucket range.")
+		results.append({
+			"element_range": element_range,
+			"min_buckets": min_buckets if min_buckets is not None else "N/A",
+			"accuracy": args.accuracy,
+			"trials": trials,
+			"rows": args.rows,
+			"max_count_per_flow": args.max_count_per_flow
+		})
+
+	# Write results to CSV
+	csv_filename = "fermat_sketch_results.csv"
+	with open(csv_filename, "w", newline="") as csvfile:
+		fieldnames = ["element_range", "min_buckets", "accuracy", "trials", "rows", "max_count_per_flow"]
+		writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+		writer.writeheader()
+		for row in results:
+			writer.writerow(row)
+	print(f"\nResults written to {csv_filename}")
 

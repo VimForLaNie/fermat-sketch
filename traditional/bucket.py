@@ -5,7 +5,6 @@ class Bucket :
 		self.p = p
 		pass
 
-
 	def insert(self, flow_id):
 		self.count += 1
 		self.id = (self.id + flow_id) % self.p
@@ -15,11 +14,11 @@ class Bucket :
 		self.id = (self.id - flow_id * cnt) % self.p
 				
 
-	def is_pure(self, j , hash, f = None) :
+	def is_pure(self, j , hash_func) :
 		if self.count <= 0 :
 			return False
 		f_prime = self.id * power(self.count,self.p -2,self.p)
-		if hash(f_prime) != j :
+		if hash_func(f_prime) != j :
 			return False
 		return True
 

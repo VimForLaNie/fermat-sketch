@@ -1,7 +1,6 @@
 import random
-from .bucket import Bucket
-from .kbucket import Kbucket
-from .MrJittacore import brute_force_k2_2d, inverse_matrix
+from kbucket import Kbucket
+from MrJittacore import brute_force_k2_2d, inverse_matrix
 import numpy as np
 
 class Rows:
@@ -14,8 +13,10 @@ class Rows:
         self.k = k
         self.rc = rc
         self.use_modular = use_modular  # if True, attempt modular inverses via inverse_matrix(..., p)
-        # NOTE: keep random seed determinism outside if needed
-        pass
+        # Cache all brute force matrices for this row
+        self.brute_force_matrices = {}
+        for kk in range(self.k, 0, -1):
+            self.brute_force_matrices[kk] = list(brute_force_k2_2d(kk, self.rc))
 
     def hash(self, f):
         return ((self._a * f + self._b) % self.p) % self.m
@@ -42,8 +43,8 @@ class Rows:
             if np.count_nonzero(a) == 0:
                 continue
 
-            # iterate candidate g matrices (brute force). WARNING: expensive for large rc/kk
-            for g_candidate in brute_force_k2_2d(kk, self.rc):
+            # iterate candidate g matrices from cache
+            for g_candidate in self.brute_force_matrices[kk]:
                 g = np.array(g_candidate, dtype=float)  # use float for numeric inversion
                 # quick rank check (floating). If rank < kk skip
                 try:

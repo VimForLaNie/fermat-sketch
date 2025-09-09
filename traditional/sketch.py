@@ -1,13 +1,11 @@
 from collections import deque, defaultdict
 from row import Rows
 
-
 class Sketch :
 	def __init__(self, rows_cnt, buckets_cnt, p) :
 		self.rows_cnt = rows_cnt
 		self.p = p
 		self.rows = [Rows(buckets_cnt, p) for _ in range(rows_cnt)]
-		self.pure_elements = []
 		self.flowset = defaultdict(int)
 
 	def insert(self,f) :
