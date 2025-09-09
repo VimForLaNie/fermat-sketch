@@ -1,7 +1,6 @@
 from sketch import Sketch
 from collections import Counter
 import random
- # ...existing code...
 import argparse
 
 debug = True
@@ -53,11 +52,12 @@ def check_flow_result(flow, s, verbose=True):
 
 import time
 
-def run_experiment(rows_cnt, buckets_cnt, element_range, max_count_per_flow, trials, p=int(1e9 + 7), verbose=False):
+def run_experiment(rows_cnt, rc, slot_count, k, element_range, max_count_per_flow, trials, p=int(1e9 + 7), verbose=False):
 	success = 0
 	decoding_times = []
+	bucket_count = slot_count // k
 	for t in range(trials):
-		sketch = Sketch(rows_cnt, buckets_cnt, p)
+		sketch = Sketch(rows_cnt, slot_count//k, p, k,rc)
 		# Insert all flow IDs in the range, each with a random count between 1 and max_count_per_flow
 		flow_ids = list(range(1, element_range + 1))
 		elements = []
@@ -74,29 +74,26 @@ def run_experiment(rows_cnt, buckets_cnt, element_range, max_count_per_flow, tri
 		recovered = sketch.verify()
 		end_time = time.time()
 		decoding_times.append(end_time - start_time)
-		fp = sum(1 for f in recovered if f not in flow_counts)
-		fn = sum(1 for f in flow_counts if f not in recovered)
-		if fp == 0 and fn == 0:
-			# Also check counts match
-			if all(recovered[f] == flow_counts[f] for f in flow_counts):
-				success += 1
+		# Success only if recovered flow exactly matches input (no fp, fn, or count mismatch)
+		if recovered == flow_counts:
+			success += 1
 		if verbose and (t % max(1, trials // 10) == 0 or t == trials - 1):
 			print(f"  Trial {t+1}/{trials}: Successes so far = {success}, Decoding time: {decoding_times[-1]:.6f} sec")
 	mean_decoding_time = sum(decoding_times) / len(decoding_times) if decoding_times else 0.0
 	return success, mean_decoding_time, decoding_times
 
-def binary_search_buckets(rows_cnt, element_range, max_count_per_flow, required_accuracy, trials, p=int(1e9 + 7), min_buckets=1, max_buckets=100000, verbose=False):
-	left = min_buckets
-	right = max_buckets
+def binary_search_slots(rows_cnt, rc, element_range, max_count_per_flow, k, required_accuracy, trials, p=int(1e9 + 7), min_slots=1, max_slots=100000, verbose=False):
+	left = min_slots
+	right = max_slots
 	answer = None
 	best_mean_time = None
 	best_raw_times = None
 	while left <= right:
 		mid = (left + right) // 2
-		print(f"Testing buckets: {mid}")
-		success, mean_decoding_time, decoding_times = run_experiment(rows_cnt, mid, element_range, max_count_per_flow, trials, p, verbose=verbose)
+		print(f"Testing slot_count: {mid}")
+		success, mean_decoding_time, decoding_times = run_experiment(rows_cnt, rc, mid, k, element_range, max_count_per_flow, trials, p, verbose=verbose)
 		acc = success / trials
-		print(f"Buckets: {mid}, Success: {success}/{trials}, Accuracy: {acc*100:.4f}%, Mean decoding time: {mean_decoding_time:.6f} sec")
+		print(f"Slot_count: {mid}, Success: {success}/{trials}, Accuracy: {acc*100:.4f}%, Mean decoding time: {mean_decoding_time:.6f} sec")
 		if acc >= required_accuracy:
 			answer = mid
 			best_mean_time = mean_decoding_time
@@ -109,13 +106,15 @@ def binary_search_buckets(rows_cnt, element_range, max_count_per_flow, required_
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="FermatSketch experiment runner")
+	parser.add_argument('--rc', type=int, default=3, help='rc parameter for Sketch')
 	parser.add_argument('--rows', type=int, default=3, help='Number of rows in sketch')
 	parser.add_argument('--element_range', type=int, nargs='+', default=[1000], help='List of flow ID ranges to test (e.g. 1000 2000 5000)')
 	parser.add_argument('--max_count_per_flow', type=int, default=10, help='Maximum count per flow ID (each flow ID gets random count between 1 and this value)')
 	parser.add_argument('--accuracy', type=float, default=99.9, help='Required accuracy in percent (e.g., 99.9)')
 	parser.add_argument('--trials', type=int, default=None, help='Number of trials per experiment (default: 10x accuracy)')
-	parser.add_argument('--min_buckets', type=int, default=1, help='Minimum buckets to search')
-	parser.add_argument('--max_buckets', type=int, default=100000, help='Maximum buckets to search')
+	parser.add_argument('--min_slot_count', type=int, default=1, help='Minimum slot_count to search')
+	parser.add_argument('--max_slot_count', type=int, default=100000, help='Maximum slot_count to search')
+	parser.add_argument('--k', type=int, default=1, help='Number of slots per bucket (slot_count will be divided by k to get bucket_count)')
 	parser.add_argument('--prime', type=int, default=int(1e9+7), help='Prime modulus p')
 	parser.add_argument('--verbose', action='store_true', help='Print progress information during trials')
 	args = parser.parse_args()
@@ -130,35 +129,39 @@ if __name__ == "__main__":
 		else:
 			trials = int(1000 / (1 - required_accuracy))
 
-	print(f"Running FermatSketch experiments with rows={args.rows}, accuracy={args.accuracy}%, trials={trials}")
+	print(f"Running FermatSketch experiments with rows={args.rows}, rc={args.rc}, k={args.k}, accuracy={args.accuracy}%, trials={trials}")
 	import csv
 	results = []
 	raw_time_files = []
 	for element_range in args.element_range:
 		print(f"\nTesting element_range={element_range}")
-		min_buckets, mean_decoding_time, raw_times = binary_search_buckets(
+		min_slot_count, mean_decoding_time, raw_times = binary_search_slots(
 			rows_cnt=args.rows,
+			rc=args.rc,
 			element_range=element_range,
 			max_count_per_flow=args.max_count_per_flow,
+			k=args.k,
 			required_accuracy=required_accuracy,
 			trials=trials,
 			p=args.prime,
-			min_buckets=args.min_buckets,
-			max_buckets=args.max_buckets,
+			min_slots=args.min_slot_count,
+			max_slots=args.max_slot_count,
 			verbose=args.verbose
 		)
-		if min_buckets is not None:
-			print(f"Minimum buckets required for element_range={element_range} at {args.accuracy}% accuracy: {min_buckets}")
+		if min_slot_count is not None:
+			print(f"Minimum slot_count required for element_range={element_range} at {args.accuracy}% accuracy: {min_slot_count}")
 		else:
-			print(f"Could not achieve required accuracy for element_range={element_range} within bucket range.")
+			print(f"Could not achieve required accuracy for element_range={element_range} within slot_count range.")
 		results.append({
 			"element_range": element_range,
-			"min_buckets": min_buckets if min_buckets is not None else "N/A",
+			"min_slot_count": min_slot_count if min_slot_count is not None else "N/A",
 			"accuracy": args.accuracy,
 			"trials": trials,
 			"rows": args.rows,
+			"rc": args.rc,
+			"k": args.k,
 			"max_count_per_flow": args.max_count_per_flow,
-			"mean_decoding_time": mean_decoding_time if min_buckets is not None else "N/A"
+			"mean_decoding_time": mean_decoding_time if min_slot_count is not None else "N/A"
 		})
 		# Write raw times for this experiment
 		import hashlib, time as _time, random as _random
@@ -175,7 +178,7 @@ if __name__ == "__main__":
 	hash_str = hashlib.sha256(f"{time.time()}_{random.random()}".encode()).hexdigest()[:8]
 	csv_filename = f"fermat_sketch_results_{hash_str}.csv"
 	with open(csv_filename, "w", newline="") as csvfile:
-		fieldnames = ["element_range", "min_buckets", "accuracy", "trials", "rows", "max_count_per_flow", "mean_decoding_time"]
+		fieldnames = ["element_range", "min_slot_count", "accuracy", "trials", "rows", "rc", "k", "max_count_per_flow", "mean_decoding_time"]
 		writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 		writer.writeheader()
 		for row in results:
