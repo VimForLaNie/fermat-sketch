@@ -11,19 +11,19 @@
 int main()
 {
 	// what we vary on x-axis (number of insert events)
-	std::vector<int> insert_counts = {2000};
+	std::vector<int> insert_counts = {20};
 
 	// parameters
 	double target_recall = 0.99; // 99%
-	int trials = 1000;			 // average over trials
+	int trials = 10;			 // average over trials
 	int rows_cnt = 3;
 	int k = 2;
-	int rc = 6;
+	int rc = 4;
 	long long p = 4294967291LL;
 	cout << "Using prime p=" << p << "\n";
 	int flow_id_min = 1;
 	int flow_id_max = 1000;
-	int min_buckets = 300;
+	int min_buckets = 100;
 	int max_buckets = 1 << 16; // 65536
 
 	std::vector<int> buckets_needed = find_min_buckets_for_insert_counts(

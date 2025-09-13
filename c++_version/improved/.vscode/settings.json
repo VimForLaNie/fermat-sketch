@@ -54,6 +54,20 @@
     "unordered_map": "cpp",
     "variant": "cpp",
     "vector": "cpp",
-    "algorithm": "cpp"
+    "algorithm": "cpp",
+    "cfenv": "cpp",
+    "cinttypes": "cpp",
+    "condition_variable": "cpp",
+    "csetjmp": "cpp",
+    "csignal": "cpp",
+    "forward_list": "cpp",
+    "future": "cpp",
+    "list": "cpp",
+    "regex": "cpp",
+    "scoped_allocator": "cpp",
+    "stack": "cpp",
+    "typeindex": "cpp",
+    "unordered_set": "cpp",
+    "valarray": "cpp"
   }
 }

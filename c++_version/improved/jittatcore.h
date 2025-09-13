@@ -7,12 +7,15 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
+#include "bucket.h"
+#include "./util/murmur3.h"
+using Matrix = std::vector<std::vector<int>>;
 
 namespace MatrixUtils
 {
 
 	// Compute rank of a matrix over finite field (mod p)
-	int matrix_rank_finite_field(std::vector<std::vector<int>> matrix, int p)
+	int matrix_rank_finite_field(std::vector<std::vector<int>> matrix, long long p)
 	{
 		int rows = matrix.size();
 		int cols = matrix[0].size();
@@ -45,7 +48,8 @@ namespace MatrixUtils
 					}
 				}
 				if (inv_pivot == -1)
-					throw std::runtime_error("No modular inverse found!");
+					// throw std::runtime_error("No modular inverse found!");
+					return rank; // signal no inverse
 
 				for (int j = 0; j < cols; j++)
 				{
@@ -127,7 +131,8 @@ namespace MatrixUtils
 				pivot = (pivot % p + p) % p;
 
 			if (pivot == 0)
-				throw std::runtime_error("Matrix is singular!");
+				// throw std::runtime_error("Matrix is singular!");
+				return std::vector<std::vector<int>>(); // signal no inverse
 
 			int inv_pivot = -1;
 			if (p != -1)
@@ -141,7 +146,8 @@ namespace MatrixUtils
 					}
 				}
 				if (inv_pivot == -1)
-					throw std::runtime_error("No modular inverse found!");
+					// throw std::runtime_error("No modular inverse found!");
+					return std::vector<std::vector<int>>(); // signal no inverse
 			}
 
 			for (int j = 0; j < n; j++)
@@ -184,6 +190,164 @@ namespace MatrixUtils
 			}
 		}
 		return I;
+	}
+
+	std::vector<std::vector<int>> matmul_mod(const Matrix &A, const Matrix &B, long long p)
+	{
+		if (p <= 0)
+			throw std::invalid_argument("modulus p must be > 0");
+		std::size_t n = A.size();
+		if (n == 0)
+			return Matrix{};
+		std::size_t m = A[0].size();
+		std::size_t q = B.size();
+		if (m != q)
+			throw std::invalid_argument("A columns must equal B rows");
+		std::size_t r = B[0].size();
+
+		// allocate result filled with 0
+		Matrix C(n, std::vector<int>(r, 0));
+		for (std::size_t i = 0; i < n; ++i)
+		{
+			if (A[i].size() != m)
+				throw std::invalid_argument("A is ragged");
+			for (std::size_t k = 0; k < m; ++k)
+			{
+				if (B[k].size() != r)
+					throw std::invalid_argument("B is ragged");
+				int aik = A[i][k];
+				if (aik == 0)
+					continue; // small opt
+				for (std::size_t j = 0; j < r; ++j)
+				{
+					// use 64-bit intermediate to avoid overflow
+					int64_t prod = int64_t(aik) * int64_t(B[k][j]);
+					int64_t sum = int64_t(C[i][j]) + (prod % p);
+					sum %= p;
+					if (sum < 0)
+						sum += p;
+					C[i][j] = static_cast<int>(sum);
+				}
+			}
+		}
+		return C;
+	}
+
+	std::vector<int> mat_vec_mul(const std::vector<std::vector<int>> &M, const std::vector<int> &v, long long pmod)
+	{
+		int n = (int)M.size();
+		std::vector<int> out(n, 0);
+		for (int r = 0; r < n; ++r)
+		{
+			long long acc = 0;
+			for (int c = 0; c < n; ++c)
+			{
+				long long prod = 1LL * M[r][c] * v[c];
+				if (pmod != -1)
+				{
+					prod %= pmod;
+				}
+				acc += prod;
+				if (pmod != -1)
+				{
+					acc %= pmod;
+				}
+			}
+			if (pmod != -1)
+			{
+				acc %= pmod;
+				if (acc < 0)
+					acc += pmod;
+			}
+			out[r] = static_cast<int>(acc);
+		}
+		return out;
+	}
+
+	long long modinv(long long a, long long p)
+	{
+		long long t = 0, newt = 1;
+		long long r = p, newr = a % p;
+		while (newr != 0)
+		{
+			long long q = r / newr;
+			t = t - q * newt;
+			std::swap(t, newt);
+			r = r - q * newr;
+			std::swap(r, newr);
+		}
+		if (r > 1)
+			throw std::runtime_error("No modular inverse");
+		if (t < 0)
+			t += p;
+		return t;
+	}
+
+	int find_rank(const std::vector<std::vector<int>> &M, long long p)
+	{
+		if (M.empty())
+			return 0;
+		int rows = (int)M.size();
+		int cols = (int)M[0].size();
+
+		// Copy to long long (to avoid overflow)
+		std::vector<std::vector<long long>> A(rows, std::vector<long long>(cols));
+		for (int i = 0; i < rows; i++)
+			for (int j = 0; j < cols; j++)
+			{
+				long long val = M[i][j] % p;
+				if (val < 0)
+					val += p;
+				A[i][j] = val;
+			}
+
+		int rank = 0;
+		for (int col = 0; col < cols && rank < rows; col++)
+		{
+			// Find pivot row (with nonzero entry)
+			int pivot = -1;
+			for (int r = rank; r < rows; r++)
+			{
+				if (A[r][col] != 0)
+				{
+					pivot = r;
+					break;
+				}
+			}
+			if (pivot == -1)
+				continue;
+
+			// Swap pivot row into place
+			if (pivot != rank)
+				std::swap(A[pivot], A[rank]);
+
+			// Normalize pivot to 1
+			long long inv_piv = modinv(A[rank][col], p);
+			for (int j = col; j < cols; j++)
+			{
+				A[rank][j] = (A[rank][j] * inv_piv) % p;
+			}
+
+			// Eliminate rows below and above
+			for (int r = 0; r < rows; r++)
+			{
+				if (r == rank)
+					continue;
+				if (A[r][col] != 0)
+				{
+					long long factor = A[r][col];
+					for (int j = col; j < cols; j++)
+					{
+						A[r][j] = (A[r][j] - factor * A[rank][j]) % p;
+						if (A[r][j] < 0)
+							A[r][j] += p;
+					}
+				}
+			}
+
+			rank++;
+		}
+		return rank;
 	}
 
 }

@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <mutex>
+#include "util/murmur3.h"
 using namespace std;
 // small prime table used by g(); make sure rc * k <= PRIME_COUNT
 static const int PRIME_LIST[] = {
